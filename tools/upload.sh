@@ -7,9 +7,9 @@ root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 host=${PS5_HOST:-192.168.68.125:1337}
 cd "$root/dist"
 if [[ $# -eq 0 ]]; then
-    mapfile -t files < <(find PPSA69422 -type f)
+    mapfile -t files < <(find PPSA69423 -type f)
 else
-    files=("${@/#/PPSA69422/}")
+    files=("${@/#/PPSA69423/}")
 fi
 for f in "${files[@]}"; do
     curl -s --ftp-create-dirs -T "$f" "ftp://$host/data/homebrew/$f" || { echo "failed: $f" >&2; exit 1; }

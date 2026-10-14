@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Assembles the title folder dist/PPSA69422 from the build: eboot, home screen files,
+# Assembles the title folder dist/PPSA69423 from the build: eboot, home screen files,
 # the system libc module, the UI assets and the ROM (if present next to the repo).
 set -euo pipefail
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 build="$root/build-ps5/rush2"
 upstream="$root/src-upstream"
 radv="$root/radv/mihawk-vulkan-review"
-app="$root/dist/PPSA69422"
+app="$root/dist/PPSA69423"
 
 rm -rf -- "$app"
 mkdir -p "$app/sce_sys" "$app/sce_module"
