@@ -27,15 +27,17 @@ index f933a25..5fc1fc8 100644
          if (signature == model_signature) return;
          model_signature = signature;
 diff --git a/src/main.cpp b/src/main.cpp
-index 0d3da4e..e29397e 100644
+index 0d3da4e..c684a61 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
-@@ -61,12 +61,19 @@
+@@ -61,12 +61,21 @@
  #include "SDL_syswm.h"
  #endif
  
 +#if defined(__PROSPERO__)
 +#include "ps5_platform.h"
++#else
++#define RUSH2_PS5_STEP(name) ((void)0)
 +#endif
 +
  // The latest git tag, set by CMakeLists.txt.
@@ -50,7 +52,7 @@ index 0d3da4e..e29397e 100644
      assert(false);
      ultramodern::error_handling::quick_exit(__FILE__, __LINE__, __FUNCTION__);
  }
-@@ -136,7 +143,12 @@ ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::
+@@ -136,7 +145,12 @@ ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::
      flags |= SDL_WINDOW_VULKAN;
  #endif
  
@@ -63,7 +65,7 @@ index 0d3da4e..e29397e 100644
  
      if (window == nullptr) {
          exit_error("Failed to create window: %s\n", SDL_GetError());
-@@ -154,7 +166,7 @@ ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::
+@@ -154,7 +168,7 @@ ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::
  #if defined(_WIN32)
      rush2::steam_input_filter::install(wmInfo.info.win.window);
      return ultramodern::renderer::WindowHandle{ wmInfo.info.win.window, GetCurrentThreadId() };
@@ -72,7 +74,7 @@ index 0d3da4e..e29397e 100644
      return ultramodern::renderer::WindowHandle{ window };
  #elif defined(__APPLE__)
      SDL_MetalView view = SDL_Metal_CreateView(window);
-@@ -383,7 +395,12 @@ static void auto_import_rom(int argc, char** argv) {
+@@ -383,7 +397,12 @@ static void auto_import_rom(int argc, char** argv) {
          }
      }
      std::error_code ec;
@@ -85,7 +87,7 @@ index 0d3da4e..e29397e 100644
      for (const auto& dir : { cwd, cwd.parent_path() }) {
          for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
              auto ext = entry.path().extension().string();
-@@ -536,6 +553,9 @@ static void launcher_update(recompui::LauncherMenu*) {
+@@ -536,6 +555,9 @@ static void launcher_update(recompui::LauncherMenu*) {
  }
  
  int main(int argc, char** argv) {
@@ -95,6 +97,66 @@ index 0d3da4e..e29397e 100644
      recomp::Version project_version{};
      if (!recomp::Version::from_string(version_string, project_version)) {
          ultramodern::error_handling::message_box(("Invalid version string: " + version_string).c_str());
+@@ -571,39 +593,51 @@ int main(int argc, char** argv) {
+     SDL_setenv("SDL_AUDIODRIVER", "wasapi", true);
+ #endif
+ 
++    RUSH2_PS5_STEP("NFD_Init");
+     NFD_Init();
+ 
+     recompui::programconfig::set_program_name(rush2::program_name);
+     recompui::programconfig::set_program_id(rush2::program_id);
+ 
++    RUSH2_PS5_STEP("audio");
+     SDL_InitSubSystem(SDL_INIT_AUDIO);
+     if (!reset_audio(48000)) {
+         return EXIT_FAILURE;
+     }
+ 
++    RUSH2_PS5_STEP("controller mappings");
+     std::u8string controller_db_path = (recompui::file::get_program_path() / "recompcontrollerdb.txt").u8string();
+     if (SDL_GameControllerAddMappingsFromFile(reinterpret_cast<const char*>(controller_db_path.c_str())) < 0) {
+         fprintf(stderr, "Failed to load controller mappings: %s\n", SDL_GetError());
+     }
+ 
++    RUSH2_PS5_STEP("fonts");
+     recompui::register_primary_font("InterVariable.ttf", "Inter Variable");
+ 
++    RUSH2_PS5_STEP("data location");
+     rush2::data_location::apply_pending_move();
++    RUSH2_PS5_STEP("config path");
+     recomp::register_config_path(recompui::file::get_app_folder_path());
++    RUSH2_PS5_STEP("data files");
+     rush2::data_files::migrate();
++    RUSH2_PS5_STEP("font pack");
+     rush2::install_font_pack();
+ 
+     for (const auto& game : supported_games) {
+         recomp::register_game(game);
+     }
++    RUSH2_PS5_STEP("ROM import");
+     auto_import_rom(argc, argv);
+ 
++    RUSH2_PS5_STEP("UI exports");
+     recompui::register_ui_exports();
+ 
++    RUSH2_PS5_STEP("overlays");
+     rush2::register_overlays();
+ 
+     recompinput::players::set_single_player_mode(true);
+ 
++    RUSH2_PS5_STEP("config");
+     rush2::init_config();
+ 
+     for (int i = 1; i < argc; i++) {
+@@ -673,6 +707,7 @@ int main(int argc, char** argv) {
+     auto texture_pack_content_type_id = recomp::mods::register_mod_content_type(texture_pack_content_type);
+     recomp::mods::register_mod_container_type("rtz", std::vector{ texture_pack_content_type_id }, false);
+ 
++    RUSH2_PS5_STEP("recomp::start");
+     recomp::start(
+         project_version,
+         {},
 diff --git a/src/track_cache.cpp b/src/track_cache.cpp
 index 78f4204..7b042f8 100644
 --- a/src/track_cache.cpp

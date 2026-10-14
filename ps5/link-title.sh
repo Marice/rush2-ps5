@@ -46,6 +46,14 @@ cc -std=c++20 -O2 -fno-exceptions -fno-rtti -c "$native/app_crt.cpp" -o "$work/o
 cc -std=c++20 -O2 -fno-exceptions -fno-rtti -c "$native/app_cpp_runtime.cpp" -o "$work/obj/app_cpp_runtime.o"
 # C library functions the SDK's libc lacks.
 cc -std=c11 -O2 -c "$(dirname "${BASH_SOURCE[0]}")/ps5-shims.c" -o "$work/obj/ps5-shims.o"
+# Relative paths resolved against an emulated working directory (ps5_paths.c).
+cc -std=c11 -O2 -fvisibility=hidden -c "$(dirname "${BASH_SOURCE[0]}")/ps5_paths.c" -o "$work/obj/ps5_paths.o"
+path_wraps=()
+# Not getcwd, lstat or access: system modules import those names, and a wrapped name they
+# import would become an export of the title, which the native converter refuses.
+for name in chdir stat open fopen mkdir rmdir unlink remove rename truncate chmod opendir realpath; do
+    path_wraps+=("--wrap=$name")
+done
 
 # AGC comes from system modules; these host-link stubs only name the imports.
 stub() {
@@ -60,10 +68,10 @@ stub libSceAgcDriver vendor/ps5/sdk/stubs/agc_driver_canary_link_stub.c
 # shellcheck source=/dev/null
 source "$root/tools/radv-link.sh"
 radv_link_recipe "$root" "$sdk_root" "$archive" || exit 2
-"$sdk_root/bin/prospero-lld" "${radv_linker_script[@]}" --eh-frame-hdr "${radv_link_flags[@]}" \
+"$sdk_root/bin/prospero-lld" "${radv_linker_script[@]}" --eh-frame-hdr "${radv_link_flags[@]}" "${path_wraps[@]}" \
     --version-script "$native/app-symbols.map" --exclude-libs=ALL \
     -e _start -o "$work/llvm-pie.elf" \
-    "$work/obj/app_crt.o" "$work/obj/app_cpp_runtime.o" "$work/obj/ps5-shims.o" \
+    "$work/obj/app_crt.o" "$work/obj/app_cpp_runtime.o" "$work/obj/ps5-shims.o" "$work/obj/ps5_paths.o" \
     --start-group "${inputs[@]}" --end-group \
     "$work/stubs/libSceAgc.so" "$work/stubs/libSceAgcDriver.so" \
     "${radv_link_inputs[@]}" \
