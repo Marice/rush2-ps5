@@ -1,11 +1,12 @@
+<p align="center"><img src="assets/icon.png" alt="Rush 2 Recompiled for the PS5" width="320"></p>
+
 # Rush 2 Recompiled for the PlayStation 5
 
 A port of [Rush 2 Recompiled](https://github.com/bryantmh/rush2recompiled) (v1.0.18) to native
 PS5 homebrew. It runs as an installed title (`PPSA69423`) and renders with RT64 through Vulkan
 on [Mihawk's RADV port](https://github.com/mihawk-99/PS5_Vulkan).
 
-> **Private.** Rush 2 Recompiled has no licence yet; its author has been asked for permission
-> to publish this port. Until then this repository and its builds stay private.
+Published with the permission of bryantmh, the author of Rush 2 Recompiled.
 
 ## What works
 
@@ -81,8 +82,10 @@ applies upstream's own `lib/patches` and then this port's `patches/`, clones Mih
 repositories at the commits ProsperoEden pins, and generates the game's code from the ROM.
 After changing the sources in `src-upstream/`, `tools/make-patches.sh` writes `patches/` again.
 
-The home screen icon and backgrounds (`sce_sys/icon0.png`, `pic0.dds`, `pic1.dds`) are not in
-the repository; `tools/make-backgrounds.py` makes the backgrounds from a picture.
+The home screen icon `sce_sys/icon0.png` is made from `assets/icon.png`. The backgrounds
+(`pic0.dds`, `pic1.dds`, 8 MB each) are not in the repository; make them from
+`assets/background.png` with `tools/make-backgrounds.py assets/background.png sce_sys`
+(needs Pillow and etcpak).
 
 ## How the port works
 

@@ -16,6 +16,7 @@ First build of Rush 2 Recompiled (v1.0.18) as a native PS5 title.
 - The ROM is imported from the title folder on the first start; settings and
   saves are kept there.
 - `rush2.log` in the title folder with errors and crash reports.
+- Home screen icon and background.
 
 ### Known issues
 - Tested on one console (FW 13.60, ShadowMountPlus) only.

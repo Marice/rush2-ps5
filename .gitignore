@@ -7,7 +7,7 @@
 *.n64
 *.z64
 *.v64
-# Copyrighted source art (Midway box art, POOTERMAN logo): kept local
+# Earlier source art (Midway box art, POOTERMAN logo), not used: kept local
 /downloads/
 # Local tool state and logs
 /.home/
@@ -15,6 +15,7 @@
 /docker/.dockercfg/
 # Decision log stays local (as in stk-ps5)
 /docs/decision-log.md
-# Home screen art made from the copyrighted sources in downloads/
-/sce_sys/icon0.png
+# Home screen backgrounds, made from assets/background.png (8 MB each)
 /sce_sys/pic*.dds
+# Windows download markers
+*:Zone.Identifier
