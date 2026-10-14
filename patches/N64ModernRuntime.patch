@@ -1,5 +1,5 @@
 diff --git a/librecomp/src/recomp.cpp b/librecomp/src/recomp.cpp
-index 1200f77..8679dca 100644
+index 1200f77..154e3b4 100644
 --- a/librecomp/src/recomp.cpp
 +++ b/librecomp/src/recomp.cpp
 @@ -30,6 +30,9 @@
@@ -12,7 +12,7 @@ index 1200f77..8679dca 100644
  #endif
  
  #if defined(_WIN32)
-@@ -851,6 +854,33 @@ void recomp::start(
+@@ -851,6 +854,43 @@ void recomp::start(
              VirtualFree(rdram, 0, MEM_RELEASE);
          }
      }
@@ -20,9 +20,19 @@ index 1200f77..8679dca 100644
 +    // A title's anonymous memory budget (448 MiB) cannot hold rdram, and an anonymous PROT_NONE
 +    // reservation of 1 GiB or more fails. Reserve the address space with the kernel instead and back
 +    // the first mem_size bytes with direct memory at its start; the rest stays without access.
++    // The reservation goes at a fixed address: where the kernel puts mappings it is given no address
++    // for is the 4 GiB window RADV needs for its GPU ring (radv_ps5_platform.c), and a 4 GiB
++    // reservation there left RADV without one (no Vulkan device). 1 TiB is past RADV's
++    // device-memory region too (256 GiB at 0x4000000000).
 +    int64_t rdram_direct = 0;
-+    void* rdram_base = nullptr;
++    void* const rdram_address = reinterpret_cast<void*>(uintptr_t{0x10000000000});
++    void* rdram_base = rdram_address;
 +    alloc_failed = sceKernelReserveVirtualRange(&rdram_base, allocation_size, 0, PS5_KERNEL_DIRECT_ALIGNMENT) != 0;
++    if (!alloc_failed && rdram_base != rdram_address) {
++        fprintf(stderr, "rdram: reserved at %p instead of %p\n", rdram_base, rdram_address);
++        sceKernelMunmap(rdram_base, allocation_size);
++        alloc_failed = true;
++    }
 +    if (!alloc_failed) {
 +        alloc_failed = sceKernelAllocateDirectMemory(0, sceKernelGetDirectMemorySize(), mem_size,
 +            PS5_KERNEL_DIRECT_ALIGNMENT, PS5_KERNEL_DIRECT_TYPE_CPU, &rdram_direct) != 0;
@@ -46,7 +56,7 @@ index 1200f77..8679dca 100644
  #else
      rdram = (uint8_t*)mmap(NULL, allocation_size, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
      alloc_failed = rdram == reinterpret_cast<uint8_t*>(MAP_FAILED);
-@@ -904,6 +934,9 @@ void recomp::start(
+@@ -904,6 +944,9 @@ void recomp::start(
  #ifdef _WIN32
      // VirtualFree returns zero on failure.
      free_failed = (VirtualFree(rdram, 0, MEM_RELEASE) == 0);

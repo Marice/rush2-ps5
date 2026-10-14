@@ -27,15 +27,21 @@ namespace {
     // Many small writes to the title folder are very slow on the console (each one stalls), so the
     // log is fully buffered and written out on a timer instead of per line.
     void open_log() {
-        if (std::freopen(log_path, "w", stdout) == nullptr) {
+        // stdout and stderr each get their own stream on the log, both appending, so neither
+        // overwrites the other (dup2 onto stderr's descriptor did not reach this libc's stderr).
+        if (FILE* truncate = std::fopen(log_path, "w")) {
+            std::fclose(truncate);
+        }
+        if (std::freopen(log_path, "a", stdout) == nullptr) {
             return;
         }
         static char stdout_buffer[log_buffer_size];
         std::setvbuf(stdout, stdout_buffer, _IOFBF, sizeof(stdout_buffer));
-        dup2(fileno(stdout), fileno(stderr));
         log_fd = fileno(stdout);
-        static char stderr_buffer[log_buffer_size];
-        std::setvbuf(stderr, stderr_buffer, _IOFBF, sizeof(stderr_buffer));
+        if (std::freopen(log_path, "a", stderr) != nullptr) {
+            static char stderr_buffer[log_buffer_size];
+            std::setvbuf(stderr, stderr_buffer, _IOFBF, sizeof(stderr_buffer));
+        }
 
         std::thread([] {
             for (;;) {
@@ -111,8 +117,31 @@ namespace {
     }
 }
 
+namespace {
+    // A title has no environment. Optional NAME=VALUE lines in the title folder set variables for
+    // the libraries that read them (RADV_DEBUG, MESA_DEBUG), before any of them starts.
+    void load_environment() {
+        FILE* file = std::fopen("/app0/rush2-env.txt", "r");
+        if (file == nullptr) {
+            return;
+        }
+        char line[256];
+        while (std::fgets(line, sizeof(line), file) != nullptr) {
+            line[std::strcspn(line, "\r\n")] = '\0';
+            char* equals = std::strchr(line, '=');
+            if (equals != nullptr && line[0] != '#') {
+                *equals = '\0';
+                setenv(line, equals + 1, 1);
+                std::printf("environment: %s=%s\n", line, equals + 1);
+            }
+        }
+        std::fclose(file);
+    }
+}
+
 void rush2::ps5::init() {
     open_log();
+    load_environment();
     std::set_terminate(on_terminate);
     for (int sig : { SIGABRT, SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGSYS }) {
         signal(sig, on_signal);

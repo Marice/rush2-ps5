@@ -1,5 +1,5 @@
 diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
-index f1dd503..729aec5 100644
+index f1dd503..65224f4 100644
 --- a/plume_vulkan.cpp
 +++ b/plume_vulkan.cpp
 @@ -10,6 +10,11 @@
@@ -74,6 +74,18 @@ index f1dd503..729aec5 100644
  #   elif defined(PLUME_SDL_VULKAN_ENABLED)
          SDL_GetWindowSizeInPixels(desc.renderWindow, (int *)(&dstWidth), (int *)(&dstHeight));
  #   elif defined(__ANDROID__)
+@@ -3740,9 +3784,9 @@ namespace plume {
+         this->renderInterface = renderInterface;
+ 
+         uint32_t deviceCount = 0;
+-        vkEnumeratePhysicalDevices(renderInterface->instance, &deviceCount, nullptr);
++        VkResult enumerateRes = vkEnumeratePhysicalDevices(renderInterface->instance, &deviceCount, nullptr);
+         if (deviceCount == 0) {
+-            fprintf(stderr, "Unable to find devices that support Vulkan.\n");
++            fprintf(stderr, "Unable to find devices that support Vulkan (vkEnumeratePhysicalDevices 0x%X).\n", enumerateRes);
+             return;
+         }
+         
 @@ -4464,7 +4508,12 @@ namespace plume {
  #else
      VulkanInterface::VulkanInterface() {
