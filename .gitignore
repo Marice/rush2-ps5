@@ -1,0 +1,17 @@
+# Upstream checkout, Mihawk's driver checkouts and everything built from them
+/src-upstream/
+/radv/
+/build*/
+/dist/
+# ROMs and anything derived from them
+*.n64
+*.z64
+*.v64
+# Copyrighted source art (Midway box art, POOTERMAN logo): kept local
+/downloads/
+# Local tool state and logs
+/.home/
+/logs/
+/docker/.dockercfg/
+# Decision log stays local (as in stk-ps5)
+/docs/decision-log.md
