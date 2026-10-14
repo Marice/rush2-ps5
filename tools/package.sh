@@ -18,6 +18,16 @@ cp "$build/Rush2Recompiled" "$app/eboot.bin"
 cp "$root"/sce_sys/{param.json,icon0.png,pic0.dds,pic1.dds} "$app/sce_sys/"
 cp "$radv/runtime/libc.prx" "$app/sce_module/libc.prx"
 cp -r "$upstream/assets" "$app/assets"
+# The port's own art replaces upstream's launcher logo and window icon (assets/icon.png).
+python3 -I - "$root/assets/icon.png" "$app/assets" <<'PY'
+import sys
+from pathlib import Path
+from PIL import Image
+icon = Image.open(sys.argv[1]).convert("RGBA")
+out = Path(sys.argv[2])
+icon.resize((512, 512), Image.LANCZOS).save(out / "logo.png", optimize=True)
+out.joinpath("icon_128.rgba").write_bytes(icon.resize((128, 128), Image.LANCZOS).tobytes())
+PY
 cp "$upstream/recompcontrollerdb.txt" "$app/"
 # The game imports a ROM it finds in the title folder on its first start. A release never
 # carries one: players put their own in the folder.
