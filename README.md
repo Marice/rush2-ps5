@@ -103,6 +103,8 @@ The home screen icon `sce_sys/icon0.png` is made from `assets/icon.png`. The bac
 
 ## Licences and credits
 
+- This port's own files (`ps5/`, `patches/`, `cmake/`, `docker/`, `tools/`, the build scripts)
+  are GPL-3.0-or-later (`LICENSE`).
 - Rush 2 Recompiled by bryantmh: no licence published.
 - N64Recomp, N64ModernRuntime, RecompFrontend and RT64: see their repositories.
 - Mesa/RADV PS5 port, PS5_Vulkan and the payload SDK fork by Mihawk-99 (GPL-3.0 for PS5_Vulkan).
