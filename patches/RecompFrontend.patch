@@ -1,0 +1,91 @@
+diff --git a/recompui/src/base/ui_state.cpp b/recompui/src/base/ui_state.cpp
+index b347a8c..2bc3e26 100644
+--- a/recompui/src/base/ui_state.cpp
++++ b/recompui/src/base/ui_state.cpp
+@@ -510,7 +510,7 @@ inline const std::string read_file_to_string(std::filesystem::path path) {
+ }
+ 
+ void init_hook(plume::RenderInterface* interface, plume::RenderDevice* device) {
+-#if defined(__linux__)
++#if defined(__linux__) || defined(__PROSPERO__)
+     std::locale::global(std::locale::classic());
+ #endif
+     ui_state = std::make_unique<UIState>(window, interface, device);
+diff --git a/recompui/src/composites/ui_mod_installer.cpp b/recompui/src/composites/ui_mod_installer.cpp
+index 1f98b3c..af59552 100644
+--- a/recompui/src/composites/ui_mod_installer.cpp
++++ b/recompui/src/composites/ui_mod_installer.cpp
+@@ -15,6 +15,10 @@ namespace recompui {
+         return file_path.extension() == ".so" || file_path.filename().string().find(".so.") != std::string::npos;
+ #elif defined(__APPLE__)
+         return file_path.extension() == ".dylib";
++#elif defined(__PROSPERO__)
++        // Native code mods cannot be loaded into a title.
++        (void)file_path;
++        return false;
+ #else
+         static_assert(false, "Unimplemented for this platform.");
+ #endif
+diff --git a/recompui/src/composites/ui_mod_menu.cpp b/recompui/src/composites/ui_mod_menu.cpp
+index 02455fd..68e4e02 100644
+--- a/recompui/src/composites/ui_mod_menu.cpp
++++ b/recompui/src/composites/ui_mod_menu.cpp
+@@ -295,6 +295,9 @@ void ModMenu::open_mods_folder() {
+ #elif defined(__linux__)
+     std::string command = "xdg-open \"" + mods_directory.string() + "\" &";
+     std::system(command.c_str());
++#elif defined(__PROSPERO__)
++    // No file browser on the PS5: the mods folder is reached over FTP.
++    (void)mods_directory;
+ #elif defined(__APPLE__)
+     std::string command = "open \"" + mods_directory.string() + "\"";
+     std::system(command.c_str());
+diff --git a/recompui/src/config/ui_config_tab_graphics.cpp b/recompui/src/config/ui_config_tab_graphics.cpp
+index d5ba2a2..88937e7 100644
+--- a/recompui/src/config/ui_config_tab_graphics.cpp
++++ b/recompui/src/config/ui_config_tab_graphics.cpp
+@@ -44,7 +44,7 @@ namespace recompui {
+         #if defined(_WIN32)
+         #define ALLOW_D3D12
+         #endif
+-        #if defined(_WIN32) || defined(__linux__)
++        #if defined(_WIN32) || defined(__linux__) || defined(__PROSPERO__)
+         #define ALLOW_VULKAN
+         #endif
+         #if defined(__APPLE__)
+diff --git a/recompui/src/renderer/rt64_render_context.cpp b/recompui/src/renderer/rt64_render_context.cpp
+index a3edb30..27ba9fe 100644
+--- a/recompui/src/renderer/rt64_render_context.cpp
++++ b/recompui/src/renderer/rt64_render_context.cpp
+@@ -231,7 +231,7 @@ renderer::RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::Window
+     RT64::Application::Core appCore{};
+ #if defined(_WIN32)
+     appCore.window = window_handle.window;
+-#elif defined(__linux__) || defined(__ANDROID__)
++#elif defined(__linux__) || defined(__ANDROID__) || defined(__PROSPERO__)
+     appCore.window = window_handle;
+ #elif defined(__APPLE__)
+     appCore.window.window = window_handle.window;
+diff --git a/recompui/src/util/file.cpp b/recompui/src/util/file.cpp
+index 7ee84ed..35ac306 100644
+--- a/recompui/src/util/file.cpp
++++ b/recompui/src/util/file.cpp
+@@ -83,6 +83,9 @@ namespace recompui {
+         }
+ 
+         CoTaskMemFree(known_path);
++#elif defined(__PROSPERO__)
++        // Settings, saves and the ROM copy live in the title folder.
++        recomp_dir = std::filesystem::path{"/app0"};
+ #elif defined(__linux__) || defined(__APPLE__)
+         // check for APP_FOLDER_PATH env var
+         if (getenv("APP_FOLDER_PATH") != nullptr) {
+@@ -119,6 +122,8 @@ namespace recompui {
+         return file::apple::get_bundle_resource_directory();
+ #elif defined(__linux__) && defined(RECOMP_FLATPAK)
+         return "/app/bin";
++#elif defined(__PROSPERO__)
++        return "/app0";
+ #else
+         return "";
+ #endif

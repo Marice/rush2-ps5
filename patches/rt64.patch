@@ -1,0 +1,98 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 358e97b..2606fda 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -69,9 +69,21 @@ set(ZSTD_LEGACY_SUPPORT OFF)
+ set(ZSTD_BUILD_STATIC ON)
+ set(ZSTD_BUILD_SHARED OFF)
+ 
+-add_subdirectory(src/tools/file_to_c)
++if (PS5)
++    # Cross build: file_to_c runs on the host, built beforehand (RUSH2_HOST_TOOLS).
++    add_executable(file_to_c IMPORTED GLOBAL)
++    set_target_properties(file_to_c PROPERTIES IMPORTED_LOCATION "${RUSH2_HOST_TOOLS}/file_to_c")
++else()
++    add_subdirectory(src/tools/file_to_c)
++endif()
+ add_subdirectory(src/contrib/re-spirv)
+-add_subdirectory(src/contrib/nativefiledialog-extended)
++if (PS5)
++    # A title has no file dialogs: a stub library that always cancels.
++    add_library(nfd STATIC "${RUSH2_PS5_DIR}/nfd_stub.c")
++    target_include_directories(nfd PUBLIC "${PROJECT_SOURCE_DIR}/src/contrib/nativefiledialog-extended/src/include")
++else()
++    add_subdirectory(src/contrib/nativefiledialog-extended)
++endif()
+ add_subdirectory(src/contrib/zstd/build/cmake)
+ 
+ if (CMAKE_SYSTEM_NAME MATCHES "Linux" AND RT64_SDL_WINDOW_VULKAN)
+diff --git a/src/common/rt64_thread.cpp b/src/common/rt64_thread.cpp
+index c4b080b..5b2f290 100644
+--- a/src/common/rt64_thread.cpp
++++ b/src/common/rt64_thread.cpp
+@@ -12,6 +12,9 @@
+ #   include "utf8conv/utf8conv.h"
+ #elif defined(__linux__)
+ #   include <pthread.h>
++#elif defined(__PROSPERO__)
++#   include <pthread.h>
++#   include <pthread_np.h>
+ #endif
+ 
+ namespace RT64 {
+@@ -47,6 +50,8 @@ namespace RT64 {
+         pthread_setname_np(pthread_self(), str.c_str());
+ #   elif defined(__APPLE__)
+         pthread_setname_np(str.c_str());
++#   elif defined(__PROSPERO__)
++        pthread_set_name_np(pthread_self(), str.c_str());
+ #   else
+         static_assert(false, "Unimplemented");
+ #   endif
+@@ -55,7 +60,7 @@ namespace RT64 {
+     void Thread::setCurrentThreadPriority(Priority priority) {
+ #   if defined(_WIN32)
+         SetThreadPriority(GetCurrentThread(), toWindowsPriority(priority));
+-#   elif defined(__linux__) || defined(__APPLE__)
++#   elif defined(__linux__) || defined(__APPLE__) || defined(__PROSPERO__)
+         // On Linux, thread priorities can't be changed under the default scheduler policy (SCHED_OTHER) and the other policies
+         // that are available without root privileges are lower priority. Instead you can set the thread's "nice" value, which ranges
+         // from -20 to 19 (lower being higher priority). However, by strict POSIX spec "nice" is meant to be per-process instead of
+diff --git a/src/contrib/plume b/src/contrib/plume
+--- a/src/contrib/plume
++++ b/src/contrib/plume
+@@ -1 +1 @@
+-Subproject commit d890ac899e505fb30040e037a4037cdeca68f033
++Subproject commit d890ac899e505fb30040e037a4037cdeca68f033-dirty
+diff --git a/src/hle/rt64_application_window.cpp b/src/hle/rt64_application_window.cpp
+index 08f83e5..c94285b 100755
+--- a/src/hle/rt64_application_window.cpp
++++ b/src/hle/rt64_application_window.cpp
+@@ -7,6 +7,9 @@
+ #include <cassert>
+ #include <stdio.h>
+ #include <SDL.h>
++#if defined(__PROSPERO__)
++#   include <pthread_np.h>
++#endif
+ 
+ #if defined(_WIN32)
+ #   include <Windows.h>
+@@ -105,7 +108,7 @@ namespace RT64 {
+         bounds.height = rect.bottom - rect.top;
+ #   elif defined(__ANDROID__)
+         static_assert(false && "Android unimplemented");
+-#   elif defined(__linux__) || defined(__APPLE__)
++#   elif defined(__linux__) || defined(__APPLE__) || defined(__PROSPERO__)
+         if (SDL_VideoInit(nullptr) != 0) {
+             printf("Failed to init SDL2 video: %s\n", SDL_GetError());
+             assert(false && "Failed to init SDL2 video");
+@@ -166,6 +169,8 @@ namespace RT64 {
+         uint64_t tid;
+         pthread_threadid_np(nullptr, &tid);
+         setup(windowHandle, listener, tid);
++#   elif defined(__PROSPERO__)
++        setup(windowHandle, listener, uint32_t(pthread_getthreadid_np()));
+ #   else
+         setup(windowHandle, listener, pthread_self());
+ #   endif

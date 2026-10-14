@@ -1,0 +1,130 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 2fcd26a..49505a9 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -108,6 +108,10 @@ target_sources(RecompiledFuncs PRIVATE ${FUNC_C_SOURCES} ${FUNC_CXX_SOURCES})
+ 
+ # Main executable
+ add_executable(Rush2Recompiled)
++if (PS5)
++    target_sources(Rush2Recompiled PRIVATE "${RUSH2_PS5_DIR}/ps5_platform.cpp")
++    target_include_directories(Rush2Recompiled PRIVATE "${RUSH2_PS5_DIR}")
++endif()
+ 
+ # The version shown in the launcher is the latest git tag (v1.0.8 -> 1.0.8), read when CMake configures; 0.1.0 without one.
+ set(RUSH2_VERSION "0.1.0")
+diff --git a/src/car_mods.cpp b/src/car_mods.cpp
+index f933a25..5fc1fc8 100644
+--- a/src/car_mods.cpp
++++ b/src/car_mods.cpp
+@@ -1047,7 +1047,7 @@ namespace {
+         for (const ModelFile& f : files) {
+             std::error_code ec;
+             auto time = std::filesystem::last_write_time(mods[f.mod].path, ec);
+-            signature += mods[f.mod].mod_id + ":" + f.path + ":" + std::to_string(ec ? 0 : time.time_since_epoch().count()) + ";";
++            signature += mods[f.mod].mod_id + ":" + f.path + ":" + std::to_string(ec ? 0LL : (long long)time.time_since_epoch().count()) + ";";
+         }
+         if (signature == model_signature) return;
+         model_signature = signature;
+diff --git a/src/main.cpp b/src/main.cpp
+index 0d3da4e..e29397e 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -61,12 +61,19 @@
+ #include "SDL_syswm.h"
+ #endif
+ 
++#if defined(__PROSPERO__)
++#include "ps5_platform.h"
++#endif
++
+ // The latest git tag, set by CMakeLists.txt.
+ const std::string version_string = RUSH2_VERSION;
+ 
+ template<typename... Ts>
+ void exit_error(const char* str, Ts ...args) {
+     ((void)fprintf(stderr, str, args), ...);
++#if defined(__PROSPERO__)
++    rush2::ps5::flush_log();
++#endif
+     assert(false);
+     ultramodern::error_handling::quick_exit(__FILE__, __LINE__, __FUNCTION__);
+ }
+@@ -136,7 +143,12 @@ ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::
+     flags |= SDL_WINDOW_VULKAN;
+ #endif
+ 
++#if defined(__PROSPERO__)
++    // An offscreen window the size of the console's output (the display mode plume presents to).
++    window = SDL_CreateWindow(rush2::program_name.c_str(), 0, 0, 3840, 2160, 0);
++#else
+     window = SDL_CreateWindow(rush2::program_name.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1600, 900, flags);
++#endif
+ 
+     if (window == nullptr) {
+         exit_error("Failed to create window: %s\n", SDL_GetError());
+@@ -154,7 +166,7 @@ ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::
+ #if defined(_WIN32)
+     rush2::steam_input_filter::install(wmInfo.info.win.window);
+     return ultramodern::renderer::WindowHandle{ wmInfo.info.win.window, GetCurrentThreadId() };
+-#elif defined(__linux__) || defined(__ANDROID__)
++#elif defined(__linux__) || defined(__ANDROID__) || defined(__PROSPERO__)
+     return ultramodern::renderer::WindowHandle{ window };
+ #elif defined(__APPLE__)
+     SDL_MetalView view = SDL_Metal_CreateView(window);
+@@ -383,7 +395,12 @@ static void auto_import_rom(int argc, char** argv) {
+         }
+     }
+     std::error_code ec;
++#if defined(__PROSPERO__)
++    // A title has no working directory: the ROM is looked for in the title folder.
++    std::filesystem::path cwd{"/app0"};
++#else
+     std::filesystem::path cwd = std::filesystem::current_path(ec);
++#endif
+     for (const auto& dir : { cwd, cwd.parent_path() }) {
+         for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+             auto ext = entry.path().extension().string();
+@@ -536,6 +553,9 @@ static void launcher_update(recompui::LauncherMenu*) {
+ }
+ 
+ int main(int argc, char** argv) {
++#if defined(__PROSPERO__)
++    rush2::ps5::init();
++#endif
+     recomp::Version project_version{};
+     if (!recomp::Version::from_string(version_string, project_version)) {
+         ultramodern::error_handling::message_box(("Invalid version string: " + version_string).c_str());
+diff --git a/src/track_cache.cpp b/src/track_cache.cpp
+index 78f4204..7b042f8 100644
+--- a/src/track_cache.cpp
++++ b/src/track_cache.cpp
+@@ -32,11 +32,14 @@ namespace {
+     enum class Kind : uint32_t { Rush1 = 1, Rush2049 = 2, Blob = 3 };
+ 
+     // A field added to a converted track struct has to be added to write()/read() below; then update these sizes.
++    // The sizes are those of the MSVC standard library the Windows build uses.
++#ifdef _WIN32
+     static_assert(sizeof(rush2::track1::ConvertedTrack) == 392, "update track_cache.cpp for ConvertedTrack (track1)");
+     static_assert(sizeof(rush2::track2049::ConvertedTrack) == 392, "update track_cache.cpp for ConvertedTrack (2049)");
+     static_assert(sizeof(rush2::track1::ConvertedTrack::Timing) == 64, "update track_cache.cpp for Timing");
+     static_assert(sizeof(rush2::track2049::TexFlipbook) == 72, "update track_cache.cpp for TexFlipbook");
+     static_assert(sizeof(rush2::track2049::TexScroll) == 72, "update track_cache.cpp for TexScroll");
++#endif
+ 
+     std::filesystem::path cache_dir() {
+         return recomp::get_config_path() / "track_cache";
+@@ -49,9 +52,11 @@ namespace {
+             wchar_t buf[MAX_PATH * 4];
+             DWORD n = GetModuleFileNameW(nullptr, buf, (DWORD)std::size(buf));
+             if (n > 0 && n < std::size(buf)) exe = std::filesystem::path(std::wstring(buf, n));
++#elif defined(__PROSPERO__)
++            exe = "/app0/eboot.bin";
+ #else
+-            std::error_code ec;
+-            exe = std::filesystem::read_symlink("/proc/self/exe", ec);
++            std::error_code link_ec;
++            exe = std::filesystem::read_symlink("/proc/self/exe", link_ec);
+ #endif
+             std::error_code ec;
+             uint64_t size = exe.empty() ? 0 : (uint64_t)std::filesystem::file_size(exe, ec);

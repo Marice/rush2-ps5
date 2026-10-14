@@ -1,0 +1,113 @@
+diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
+index f1dd503..729aec5 100644
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -10,6 +10,11 @@
+ 
+ #include "plume_vulkan.h"
+ 
++#if defined(__PROSPERO__)
++// RADV is linked statically into the title; its ICD entry point replaces the loader.
++extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vk_icdGetInstanceProcAddr(VkInstance instance, const char *name);
++#endif
++
+ #include <algorithm>
+ #include <cmath>
+ #include <climits>
+@@ -58,6 +63,8 @@ namespace plume {
+ #   endif
+ #   elif defined(__APPLE__)
+         VK_EXT_METAL_SURFACE_EXTENSION_NAME,
++#   elif defined(__PROSPERO__)
++        VK_KHR_DISPLAY_EXTENSION_NAME,
+ #   endif
+     };
+ 
+@@ -2095,6 +2102,40 @@ namespace plume {
+             fprintf(stderr, "vkCreateWin32SurfaceKHR failed with error code 0x%X.\n", res);
+             return;
+         }
++#   elif defined(__PROSPERO__)
++        // The display's first mode is the output the system set (3840x2160 at 59.94 Hz on the
++        // tested console); a display plane surface has to use the mode's own extent.
++        VulkanInterface *renderInterface = commandQueue->device->renderInterface;
++        VkPhysicalDevice displayDevice = commandQueue->device->physicalDevice;
++        VkDisplayPropertiesKHR displayProperties = {};
++        uint32_t displayCount = 1;
++        res = vkGetPhysicalDeviceDisplayPropertiesKHR(displayDevice, &displayCount, &displayProperties);
++        if (((res != VK_SUCCESS) && (res != VK_INCOMPLETE)) || (displayCount == 0)) {
++            fprintf(stderr, "vkGetPhysicalDeviceDisplayPropertiesKHR failed with error code 0x%X.\n", res);
++            return;
++        }
++
++        uint32_t modeCount = 0;
++        vkGetDisplayModePropertiesKHR(displayDevice, displayProperties.display, &modeCount, nullptr);
++        std::vector<VkDisplayModePropertiesKHR> modes(modeCount);
++        res = vkGetDisplayModePropertiesKHR(displayDevice, displayProperties.display, &modeCount, modes.data());
++        if ((res != VK_SUCCESS) || (modeCount == 0)) {
++            fprintf(stderr, "vkGetDisplayModePropertiesKHR failed with error code 0x%X.\n", res);
++            return;
++        }
++
++        displayExtent = modes[0].parameters.visibleRegion;
++        VkDisplaySurfaceCreateInfoKHR surfaceCreateInfo = {};
++        surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_DISPLAY_SURFACE_CREATE_INFO_KHR;
++        surfaceCreateInfo.displayMode = modes[0].displayMode;
++        surfaceCreateInfo.transform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
++        surfaceCreateInfo.alphaMode = VK_DISPLAY_PLANE_ALPHA_OPAQUE_BIT_KHR;
++        surfaceCreateInfo.imageExtent = displayExtent;
++        res = vkCreateDisplayPlaneSurfaceKHR(renderInterface->instance, &surfaceCreateInfo, nullptr, &surface);
++        if (res != VK_SUCCESS) {
++            fprintf(stderr, "vkCreateDisplayPlaneSurfaceKHR failed with error code 0x%X.\n", res);
++            return;
++        }
+ #   elif defined(PLUME_SDL_VULKAN_ENABLED)
+         VulkanInterface *renderInterface = commandQueue->device->renderInterface;
+         SDL_bool sdlRes = SDL_Vulkan_CreateSurface(desc.renderWindow, renderInterface->instance, &surface);
+@@ -2463,6 +2504,9 @@ namespace plume {
+         GetClientRect(desc.renderWindow, &rect);
+         dstWidth = rect.right - rect.left;
+         dstHeight = rect.bottom - rect.top;
++#   elif defined(__PROSPERO__)
++        dstWidth = displayExtent.width;
++        dstHeight = displayExtent.height;
+ #   elif defined(PLUME_SDL_VULKAN_ENABLED)
+         SDL_GetWindowSizeInPixels(desc.renderWindow, (int *)(&dstWidth), (int *)(&dstHeight));
+ #   elif defined(__ANDROID__)
+@@ -4464,7 +4508,12 @@ namespace plume {
+ #else
+     VulkanInterface::VulkanInterface() {
+ #endif
++#   if defined(__PROSPERO__)
++        volkInitializeCustom(vk_icdGetInstanceProcAddr);
++        VkResult res = VK_SUCCESS;
++#   else
+         VkResult res = volkInitialize();
++#   endif
+         if (res != VK_SUCCESS) {
+             fprintf(stderr, "volkInitialize failed with error code 0x%X.\n", res);
+             return;
+@@ -4500,7 +4549,7 @@ namespace plume {
+         const std::unordered_set<std::string> dlssExtensions = DLSS::getRequiredInstanceExtensionsVulkan();
+ #   endif
+ 
+-#   if PLUME_SDL_VULKAN_ENABLED
++#   if PLUME_SDL_VULKAN_ENABLED && !defined(__PROSPERO__)
+         // Push the extensions specified by SDL as required.
+         // SDL2 has this awkward requirement for the window to pull the extensions from. 
+         // This can be removed when upgrading to SDL3.
+diff --git a/plume_vulkan.h b/plume_vulkan.h
+index 0a1edbe..f6292a8 100644
+--- a/plume_vulkan.h
++++ b/plume_vulkan.h
+@@ -226,6 +226,10 @@ namespace plume {
+         VkSwapchainKHR vk = VK_NULL_HANDLE;
+         VulkanCommandQueue *commandQueue = nullptr;
+         VkSurfaceKHR surface = VK_NULL_HANDLE;
++#   if defined(__PROSPERO__)
++        // The PS5 has no windows: the swapchain presents to the display plane (VK_KHR_display).
++        VkExtent2D displayExtent = {};
++#   endif
+ #if defined(__APPLE__)
+         std::unique_ptr<CocoaWindow> windowWrapper;
+ #endif

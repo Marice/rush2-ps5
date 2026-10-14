@@ -1,0 +1,90 @@
+diff --git a/librecomp/src/recomp.cpp b/librecomp/src/recomp.cpp
+index 1200f77..8679dca 100644
+--- a/librecomp/src/recomp.cpp
++++ b/librecomp/src/recomp.cpp
+@@ -30,6 +30,9 @@
+ #    include <Windows.h>
+ #else
+ #    include <sys/mman.h>
++#    if defined(__PROSPERO__)
++#        include <ps5platform/kernel.h>
++#    endif
+ #endif
+ 
+ #if defined(_WIN32)
+@@ -851,6 +854,33 @@ void recomp::start(
+             VirtualFree(rdram, 0, MEM_RELEASE);
+         }
+     }
++#elif defined(__PROSPERO__)
++    // A title's anonymous memory budget (448 MiB) cannot hold rdram, and an anonymous PROT_NONE
++    // reservation of 1 GiB or more fails. Reserve the address space with the kernel instead and back
++    // the first mem_size bytes with direct memory at its start; the rest stays without access.
++    int64_t rdram_direct = 0;
++    void* rdram_base = nullptr;
++    alloc_failed = sceKernelReserveVirtualRange(&rdram_base, allocation_size, 0, PS5_KERNEL_DIRECT_ALIGNMENT) != 0;
++    if (!alloc_failed) {
++        alloc_failed = sceKernelAllocateDirectMemory(0, sceKernelGetDirectMemorySize(), mem_size,
++            PS5_KERNEL_DIRECT_ALIGNMENT, PS5_KERNEL_DIRECT_TYPE_CPU, &rdram_direct) != 0;
++        if (!alloc_failed) {
++            void* mapped = rdram_base;
++            alloc_failed = sceKernelMapDirectMemory(&mapped, mem_size, PS5_KERNEL_PROT_CPU_READ | PS5_KERNEL_PROT_CPU_WRITE,
++                PS5_KERNEL_MAP_FIXED, rdram_direct, PS5_KERNEL_DIRECT_ALIGNMENT) != 0 || mapped != rdram_base;
++            if (alloc_failed) {
++                sceKernelReleaseDirectMemory(rdram_direct, mem_size);
++            }
++        }
++        if (alloc_failed) {
++            sceKernelMunmap(rdram_base, allocation_size);
++        }
++    }
++    rdram = reinterpret_cast<uint8_t*>(rdram_base);
++    if (!alloc_failed) {
++        // Direct memory is not cleared on allocation; the runtime expects zeroed rdram.
++        memset(rdram, 0, mem_size);
++    }
+ #else
+     rdram = (uint8_t*)mmap(NULL, allocation_size, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
+     alloc_failed = rdram == reinterpret_cast<uint8_t*>(MAP_FAILED);
+@@ -904,6 +934,9 @@ void recomp::start(
+ #ifdef _WIN32
+     // VirtualFree returns zero on failure.
+     free_failed = (VirtualFree(rdram, 0, MEM_RELEASE) == 0);
++#elif defined(__PROSPERO__)
++    free_failed = (sceKernelMunmap(rdram, allocation_size) != 0) ||
++        (sceKernelReleaseDirectMemory(rdram_direct, mem_size) != 0);
+ #else
+     // munmap returns -1 on failure.
+     free_failed = (munmap(rdram, allocation_size) == -1);
+diff --git a/ultramodern/include/ultramodern/renderer_context.hpp b/ultramodern/include/ultramodern/renderer_context.hpp
+index d60c4ec..9c07003 100644
+--- a/ultramodern/include/ultramodern/renderer_context.hpp
++++ b/ultramodern/include/ultramodern/renderer_context.hpp
+@@ -54,7 +54,7 @@ namespace ultramodern {
+             auto operator<=>(const WindowHandle&) const = default;
+         };
+ // TODO add a native window handle option here (Display/Window for x11 and ANativeWindow for Android) as a compile-time option.
+-#elif defined(__linux__) || defined(__ANDROID__)
++#elif defined(__linux__) || defined(__ANDROID__) || defined(__PROSPERO__)
+         using WindowHandle = SDL_Window*;
+ #elif defined(__APPLE__)
+         struct WindowHandle {
+diff --git a/ultramodern/src/threads.cpp b/ultramodern/src/threads.cpp
+index 812c556..d2fdf2e 100644
+--- a/ultramodern/src/threads.cpp
++++ b/ultramodern/src/threads.cpp
+@@ -133,6 +133,14 @@ void ultramodern::set_native_thread_priority(ThreadPriority pri) {
+     //         break;
+     // }
+ }
++#elif defined(__PROSPERO__)
++#include <pthread_np.h>
++
++void ultramodern::set_native_thread_name(const std::string& name) {
++    pthread_set_name_np(pthread_self(), name.c_str());
++}
++
++void ultramodern::set_native_thread_priority(ThreadPriority pri) {}
+ #elif defined(__APPLE__)
+ void ultramodern::set_native_thread_name(const std::string& name) {
+     if (name.length() > 15) {

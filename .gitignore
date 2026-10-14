@@ -15,3 +15,6 @@
 /docker/.dockercfg/
 # Decision log stays local (as in stk-ps5)
 /docs/decision-log.md
+# Home screen art made from the copyrighted sources in downloads/
+/sce_sys/icon0.png
+/sce_sys/pic*.dds
