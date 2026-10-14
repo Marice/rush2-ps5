@@ -7,7 +7,7 @@
 *.n64
 *.z64
 *.v64
-# Earlier source art (Midway box art, POOTERMAN logo), not used: kept local
+# Local downloads, not part of the port
 /downloads/
 # Local tool state and logs
 /.home/
