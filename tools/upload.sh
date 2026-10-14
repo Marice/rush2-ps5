@@ -11,7 +11,12 @@ if [[ $# -eq 0 ]]; then
 else
     files=("${@/#/PPSA69423/}")
 fi
+# The console's FTP server can refuse to overwrite a file (550), as it did for eboot.bin, so
+# each file goes up under a temporary name, the old one is deleted (if there) and the new one renamed.
 for f in "${files[@]}"; do
-    curl -s --ftp-create-dirs -T "$f" "ftp://$host/data/homebrew/$f" || { echo "failed: $f" >&2; exit 1; }
+    remote="/data/homebrew/$f"
+    curl -s --ftp-create-dirs -T "$f" "ftp://$host$remote.new" || { echo "failed: $f" >&2; exit 1; }
+    curl -s "ftp://$host/" -Q "*DELE $remote" -Q "RNFR $remote.new" -Q "RNTO $remote" -o /dev/null ||
+        { echo "failed to replace: $f" >&2; exit 1; }
 done
 echo "upload.sh: ${#files[@]} file(s) to $host"
