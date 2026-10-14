@@ -1,8 +1,8 @@
 diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
-index f1dd503..65224f4 100644
+index f1dd503..e87cb3b 100644
 --- a/plume_vulkan.cpp
 +++ b/plume_vulkan.cpp
-@@ -10,6 +10,11 @@
+@@ -10,7 +10,13 @@
  
  #include "plume_vulkan.h"
  
@@ -12,9 +12,11 @@ index f1dd503..65224f4 100644
 +#endif
 +
  #include <algorithm>
++#include <chrono>
  #include <cmath>
  #include <climits>
-@@ -58,6 +63,8 @@ namespace plume {
+ #include <unordered_map>
+@@ -58,6 +64,8 @@ namespace plume {
  #   endif
  #   elif defined(__APPLE__)
          VK_EXT_METAL_SURFACE_EXTENSION_NAME,
@@ -23,7 +25,7 @@ index f1dd503..65224f4 100644
  #   endif
      };
  
-@@ -2095,6 +2102,40 @@ namespace plume {
+@@ -2095,6 +2103,40 @@ namespace plume {
              fprintf(stderr, "vkCreateWin32SurfaceKHR failed with error code 0x%X.\n", res);
              return;
          }
@@ -64,7 +66,46 @@ index f1dd503..65224f4 100644
  #   elif defined(PLUME_SDL_VULKAN_ENABLED)
          VulkanInterface *renderInterface = commandQueue->device->renderInterface;
          SDL_bool sdlRes = SDL_Vulkan_CreateSurface(desc.renderWindow, renderInterface->instance, &surface);
-@@ -2463,6 +2504,9 @@ namespace plume {
+@@ -2286,6 +2328,26 @@ namespace plume {
+             res = vkQueuePresentKHR(commandQueue->queue->vk, &presentInfo);
+         }
+ 
++#   if defined(__PROSPERO__)
++        // Presentation trace while the console's output is brought up: the first presents and one in 600.
++        static uint64_t presentTraceCount = 0;
++        static uint64_t presentTraceWindowStart = 0;
++        static auto presentTraceTime = std::chrono::steady_clock::now();
++        presentTraceCount++;
++        if ((presentTraceCount <= 5) || (res != VK_SUCCESS)) {
++            fprintf(stderr, "plume: present #%llu image %u waits %u: 0x%X\n", (unsigned long long)presentTraceCount,
++                textureIndex, waitSemaphoreCount, res);
++        }
++        const auto presentTraceNow = std::chrono::steady_clock::now();
++        const double presentTraceSeconds = std::chrono::duration<double>(presentTraceNow - presentTraceTime).count();
++        if (presentTraceSeconds >= 5.0) {
++            fprintf(stderr, "plume: %llu presents, %.1f per second\n", (unsigned long long)presentTraceCount,
++                double(presentTraceCount - presentTraceWindowStart) / presentTraceSeconds);
++            presentTraceWindowStart = presentTraceCount;
++            presentTraceTime = presentTraceNow;
++        }
++#   endif
++
+ #if defined(__APPLE__)
+         // Under MoltenVK, VK_SUBOPTIMAL_KHR does not result in a valid state for rendering. We intentionally
+         // only check for this error during present to avoid having to synchronize manually against the semaphore
+@@ -2347,6 +2409,11 @@ namespace plume {
+         createInfo.oldSwapchain = vk;
+ 
+         VkResult res = vkCreateSwapchainKHR(commandQueue->device->vk, &createInfo, nullptr, &vk);
++#   if defined(__PROSPERO__)
++        fprintf(stderr, "plume: swapchain %ux%u format %d colour space %d images %u present mode %d: 0x%X\n",
++            width, height, createInfo.imageFormat, createInfo.imageColorSpace, createInfo.minImageCount,
++            createInfo.presentMode, res);
++#   endif
+         if (res != VK_SUCCESS) {
+             fprintf(stderr, "vkCreateSwapchainKHR failed with error code 0x%X.\n", res);
+             return false;
+@@ -2463,6 +2530,9 @@ namespace plume {
          GetClientRect(desc.renderWindow, &rect);
          dstWidth = rect.right - rect.left;
          dstHeight = rect.bottom - rect.top;
@@ -74,7 +115,21 @@ index f1dd503..65224f4 100644
  #   elif defined(PLUME_SDL_VULKAN_ENABLED)
          SDL_GetWindowSizeInPixels(desc.renderWindow, (int *)(&dstWidth), (int *)(&dstHeight));
  #   elif defined(__ANDROID__)
-@@ -3740,9 +3784,9 @@ namespace plume {
+@@ -2487,6 +2557,13 @@ namespace plume {
+ 
+         VulkanCommandSemaphore *interfaceSemaphore = static_cast<VulkanCommandSemaphore *>(signalSemaphore);
+         VkResult res = vkAcquireNextImageKHR(commandQueue->device->vk, vk, UINT64_MAX, interfaceSemaphore->vk, VK_NULL_HANDLE, textureIndex);
++#   if defined(__PROSPERO__)
++        static uint64_t acquireTraceCount = 0;
++        acquireTraceCount++;
++        if ((acquireTraceCount <= 5) || (res != VK_SUCCESS)) {
++            fprintf(stderr, "plume: acquire #%llu image %u: 0x%X\n", (unsigned long long)acquireTraceCount, *textureIndex, res);
++        }
++#   endif
+         if ((res != VK_SUCCESS) && (res != VK_SUBOPTIMAL_KHR)) {
+             return false;
+         }
+@@ -3740,9 +3817,9 @@ namespace plume {
          this->renderInterface = renderInterface;
  
          uint32_t deviceCount = 0;
@@ -86,7 +141,7 @@ index f1dd503..65224f4 100644
              return;
          }
          
-@@ -4464,7 +4508,12 @@ namespace plume {
+@@ -4464,7 +4541,12 @@ namespace plume {
  #else
      VulkanInterface::VulkanInterface() {
  #endif
@@ -99,7 +154,7 @@ index f1dd503..65224f4 100644
          if (res != VK_SUCCESS) {
              fprintf(stderr, "volkInitialize failed with error code 0x%X.\n", res);
              return;
-@@ -4500,7 +4549,7 @@ namespace plume {
+@@ -4500,7 +4582,7 @@ namespace plume {
          const std::unordered_set<std::string> dlssExtensions = DLSS::getRequiredInstanceExtensionsVulkan();
  #   endif
  

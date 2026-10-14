@@ -19,6 +19,7 @@
 #include <thread>
 
 int main(int argc, char** argv);
+extern "C" int sceSystemServiceHideSplashScreen(void);
 
 namespace {
     constexpr const char* log_path = "/app0/rush2.log";
@@ -181,6 +182,8 @@ void rush2::ps5::init() {
     // There is no video driver for the console's display: windows are offscreen windows, and RT64
     // presents through VK_KHR_display (plume) instead of the window.
     SDL_SetHint(SDL_HINT_VIDEODRIVER, "offscreen");
+    // The system's splash screen stays over the title's output until the title hides it.
+    std::printf("hide splash screen: 0x%X\n", static_cast<unsigned>(sceSystemServiceHideSplashScreen()));
 }
 
 void rush2::ps5::step(const char* name) {
