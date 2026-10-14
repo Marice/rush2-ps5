@@ -13,7 +13,7 @@ else
 fi
 main_run=$(grep -o "main at [0-9a-fx]*" <<<"$log" | head -1 | awk '{print $3}')
 [[ -n $main_run ]] || { echo "no crash report in the log" >&2; exit 1; }
-main_elf=$("$llvm/llvm-nm" "$elf" | awk '$3 == "main" {print $1; exit}')
+main_elf=$("$llvm/llvm-nm" "$elf" | awk '$3 == "main" {print $1}' | head -1)
 base=$(( 0x${main_run#0x} - 0x$main_elf ))
 grep -oE "(rip|stack\[[0-9]+\]|#[0-9]+) [0-9a-fx]+" <<<"$log" | while read -r label address; do
     [[ $address == 0x* ]] || address="0x$address"
