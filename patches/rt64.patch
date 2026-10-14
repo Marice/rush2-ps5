@@ -96,3 +96,27 @@ index 08f83e5..c94285b 100755
  #   else
          setup(windowHandle, listener, pthread_self());
  #   endif
+diff --git a/src/render/rt64_raster_shader.cpp b/src/render/rt64_raster_shader.cpp
+index 8a4a1bb..2d904fb 100644
+--- a/src/render/rt64_raster_shader.cpp
++++ b/src/render/rt64_raster_shader.cpp
+@@ -488,10 +488,19 @@ namespace RT64 {
+ 
+         // Spawn the threads that will compile all the pipelines.
+         pipelineThreads.clear();
++#   if defined(__PROSPERO__)
++        // On the PS5 a thread that compiled with RADV crashed when it ended: its thread-local
++        // destructors freed memory of the per-thread heap arena (mspace_free, address in RADV's
++        // region). The pipelines are compiled here, in order, so no such thread ends.
++        for (uint32_t i = 0; i < uint32_t(pipelineThreadCreations.size()); i++) {
++            threadCreatePipelines(i);
++        }
++#   else
+         pipelineThreads.resize(pipelineThreadCreations.size());
+         for (uint32_t i = 0; i < uint32_t(pipelineThreads.size()); i++) {
+             pipelineThreads[i] = std::make_unique<std::thread>(&RasterShaderUber::threadCreatePipelines, this, i);
+         }
++#   endif
+ 
+         // Create the pipelines for post blend operations.
+         std::unique_ptr<RenderShader> postBlendAddPixelShader;

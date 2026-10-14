@@ -5,9 +5,11 @@
 
 #include <unwind.h>
 #include <signal.h>
+#include <ucontext.h>
 #include <unistd.h>
 
 #include <chrono>
+#include <atomic>
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
@@ -110,9 +112,34 @@ namespace {
         std::_Exit(EXIT_FAILURE);
     }
 
-    void on_signal(int signal) {
-        raw_printf("signal %d\n", signal);
-        write_backtrace();
+    std::atomic<bool> crash_reported{false};
+
+    // The faulting instruction and the code addresses found on the stack above it: the backtrace
+    // of a signal stops at the signal frame. Addresses match Rush2Recompiled.elf (llvm-symbolizer).
+    // Only the first crashing thread reports; the others wait for the process to end.
+    void on_signal(int signal, siginfo_t* info, void* context) {
+        if (crash_reported.exchange(true)) {
+            for (;;) {
+                sleep(1);
+            }
+        }
+        std::fflush(stdout);
+        std::fflush(stderr);
+        const mcontext_t& machine = static_cast<ucontext_t*>(context)->uc_mcontext;
+        raw_printf("signal %d at address %p\n", signal, info != nullptr ? info->si_addr : nullptr);
+        raw_printf("  rip %p rsp %p rbp %p (main at %p)\n", reinterpret_cast<void*>(machine.mc_rip),
+                   reinterpret_cast<void*>(machine.mc_rsp), reinterpret_cast<void*>(machine.mc_rbp),
+                   reinterpret_cast<void*>(&main));
+        const uintptr_t code_start = 0x400000;
+        const uintptr_t code_end = code_start + 0x8000000;
+        const uintptr_t* stack = reinterpret_cast<const uintptr_t*>(machine.mc_rsp);
+        int found = 0;
+        for (int i = 0; i < 1024 && found < 32; i++) {
+            if (stack[i] >= code_start && stack[i] < code_end) {
+                raw_printf("  stack[%d] %p\n", i, reinterpret_cast<void*>(stack[i]));
+                found++;
+            }
+        }
         std::_Exit(128 + signal);
     }
 }
@@ -143,8 +170,12 @@ void rush2::ps5::init() {
     open_log();
     load_environment();
     std::set_terminate(on_terminate);
+    struct sigaction action {};
+    action.sa_sigaction = on_signal;
+    action.sa_flags = SA_SIGINFO;
+    sigemptyset(&action.sa_mask);
     for (int sig : { SIGABRT, SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGSYS }) {
-        signal(sig, on_signal);
+        sigaction(sig, &action, nullptr);
     }
     std::printf("Rush 2 Recompiled for the PS5: starting\n");
     // There is no video driver for the console's display: windows are offscreen windows, and RT64
