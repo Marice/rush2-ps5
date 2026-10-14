@@ -1,5 +1,5 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 358e97b..2606fda 100644
+index 358e97b..03ada67 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
 @@ -69,9 +69,21 @@ set(ZSTD_LEGACY_SUPPORT OFF)
@@ -26,6 +26,22 @@ index 358e97b..2606fda 100644
  add_subdirectory(src/contrib/zstd/build/cmake)
  
  if (CMAKE_SYSTEM_NAME MATCHES "Linux" AND RT64_SDL_WINDOW_VULKAN)
+@@ -446,8 +458,13 @@ target_link_libraries(rt64 libzstd_static)
+ target_link_libraries(rt64 plume)
+ 
+ # Add tools.
+-add_subdirectory(src/tools/texture_hasher)
+-add_subdirectory(src/tools/texture_packer)
++if (PS5)
++    # Desktop tools: on the PS5 each would only be linked into a title nobody runs.
++    set_target_properties(re-spirv-cli PROPERTIES EXCLUDE_FROM_ALL TRUE)
++else()
++    add_subdirectory(src/tools/texture_hasher)
++    add_subdirectory(src/tools/texture_packer)
++endif()
+ 
+ # Add any Apple-specific source files and libraries
+ if (APPLE)
 diff --git a/src/common/rt64_thread.cpp b/src/common/rt64_thread.cpp
 index c4b080b..5b2f290 100644
 --- a/src/common/rt64_thread.cpp

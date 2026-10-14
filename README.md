@@ -98,9 +98,6 @@ the repository; `tools/make-backgrounds.py` makes the backgrounds from a picture
 | `patches/rt64.patch` | Host tools in a cross build, PS5 branches, ubershader pipelines compiled without temporary threads |
 | `patches/RecompFrontend.patch`, `patches/rush2recompiled.patch` | PS5 branches: paths in the title folder, window, framerate default |
 
-`spike/` holds the memory test title that measured how a title may reserve the N64 address
-space.
-
 ## Licences and credits
 
 - Rush 2 Recompiled by bryantmh: no licence published.
