@@ -17,18 +17,43 @@ Tested on one console (FW 13.60, ShadowMountPlus):
 
 ## You need your own ROM
 
-Neither this repository nor its builds contain the game. You need Rush 2: Extreme Racing USA
-(USA) as a ROM (`.z64`, `.n64` or `.v64`):
+Neither this repository nor its builds contain the game. You need your own Rush 2: Extreme
+Racing USA ROM, to play and to build.
 
-- to **play**: put it in the title folder (`/data/homebrew/PPSA69423/`); the game imports it on
-  its first start
-- to **build**: the game's code is generated from it (see Building)
+### Rush 2 (required)
+
+| | |
+| --- | --- |
+| Version | **Rush 2: Extreme Racing USA, USA release.** Other releases are refused ("incorrect version"). |
+| File name | Any name. |
+| Extension | `.z64`, `.n64` or `.v64`, in **lower case**. `ROM.Z64` is not found. |
+| Byte order | Any: big-endian (`.z64`), byte-swapped (`.v64`) or little-endian. The game converts it. |
+| Check | SHA-1 of the big-endian image: `01b0a31b1accc18061e8c85f6c5edf0dbd79f097`. A byte-swapped or little-endian file has a different SHA-1 and is still accepted. |
+| Where | In the title folder, `/data/homebrew/PPSA69423/`, next to `eboot.bin`. Not in a subfolder. |
+
+On its first start the game imports the first valid ROM it finds there and keeps its own copy
+as `rush2.n64.us.z64` in the same folder. After that the file you added can be removed. The
+console has no file browser, so a ROM in another place is not found.
+
+### SF Rush and Rush 2049 (optional)
+
+Rush 2 Recompiled can add tracks and cars from San Francisco Rush and San Francisco Rush 2049.
+On the PS5 they cannot be selected in the Games tab (there is no file dialog). Put them in the
+title folder under these exact names instead:
+
+| File name | Game | SHA-1 of the big-endian image |
+| --- | --- | --- |
+| `rush1.z64` | San Francisco Rush: Extreme Racing (USA) | `cc62539cb30b180c3c7e0aa927786ed061d8d9ab` |
+| `rush2049.z64` | San Francisco Rush 2049 (USA) | `3f99351d7bb61656614bdb2aa1a90cfe55d1922c` |
+
+The game reads them in any byte order, despite the `.z64` name. This route has not been tested
+on a console yet.
 
 ## Installing
 
 1. Extract `Rush2Recompiled-PS5-<version>.zip`.
 2. Copy the `PPSA69423` folder to `/data/homebrew/` on the console (for example over FTP).
-3. Put your ROM in that folder.
+3. Put your Rush 2 ROM in that folder (see [You need your own ROM](#you-need-your-own-rom)).
 4. Let ShadowMountPlus register the title, then start Rush 2 Recompiled from the home screen.
 
 Settings, saves and caches live in the title folder. `rush2.log` there records errors and
