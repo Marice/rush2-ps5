@@ -145,31 +145,8 @@ namespace {
     }
 }
 
-namespace {
-    // A title has no environment. Optional NAME=VALUE lines in the title folder set variables for
-    // the libraries that read them (RADV_DEBUG, MESA_DEBUG), before any of them starts.
-    void load_environment() {
-        FILE* file = std::fopen("/app0/rush2-env.txt", "r");
-        if (file == nullptr) {
-            return;
-        }
-        char line[256];
-        while (std::fgets(line, sizeof(line), file) != nullptr) {
-            line[std::strcspn(line, "\r\n")] = '\0';
-            char* equals = std::strchr(line, '=');
-            if (equals != nullptr && line[0] != '#') {
-                *equals = '\0';
-                setenv(line, equals + 1, 1);
-                std::printf("environment: %s=%s\n", line, equals + 1);
-            }
-        }
-        std::fclose(file);
-    }
-}
-
 void rush2::ps5::init() {
     open_log();
-    load_environment();
     std::set_terminate(on_terminate);
     struct sigaction action {};
     action.sa_sigaction = on_signal;
@@ -178,17 +155,11 @@ void rush2::ps5::init() {
     for (int sig : { SIGABRT, SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGSYS }) {
         sigaction(sig, &action, nullptr);
     }
-    std::printf("Rush 2 Recompiled for the PS5: starting\n");
     // There is no video driver for the console's display: windows are offscreen windows, and RT64
     // presents through VK_KHR_display (plume) instead of the window.
     SDL_SetHint(SDL_HINT_VIDEODRIVER, "offscreen");
     // The system's splash screen stays over the title's output until the title hides it.
-    std::printf("hide splash screen: 0x%X\n", static_cast<unsigned>(sceSystemServiceHideSplashScreen()));
-}
-
-void rush2::ps5::step(const char* name) {
-    std::fprintf(stdout, "[start] %s\n", name);
-    flush_log();
+    sceSystemServiceHideSplashScreen();
 }
 
 void rush2::ps5::flush_log() {

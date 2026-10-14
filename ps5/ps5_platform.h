@@ -7,12 +7,4 @@ namespace rush2::ps5 {
     void init();
     // Writes the buffered log out now (at exit and in error paths).
     void flush_log();
-    // Logs a start-up step and writes the log out at once, so a crash shows how far start-up got.
-    void step(const char* name);
 }
-
-#if defined(__PROSPERO__)
-#define RUSH2_PS5_STEP(name) rush2::ps5::step(name)
-#else
-#define RUSH2_PS5_STEP(name) ((void)0)
-#endif

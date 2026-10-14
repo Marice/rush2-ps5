@@ -41,7 +41,7 @@ index 02455fd..68e4e02 100644
      std::string command = "open \"" + mods_directory.string() + "\"";
      std::system(command.c_str());
 diff --git a/recompui/src/config/ui_config_tab_graphics.cpp b/recompui/src/config/ui_config_tab_graphics.cpp
-index d5ba2a2..88937e7 100644
+index d5ba2a2..7a3437c 100644
 --- a/recompui/src/config/ui_config_tab_graphics.cpp
 +++ b/recompui/src/config/ui_config_tab_graphics.cpp
 @@ -44,7 +44,7 @@ namespace recompui {
@@ -53,6 +53,19 @@ index d5ba2a2..88937e7 100644
          #define ALLOW_VULKAN
          #endif
          #if defined(__APPLE__)
+@@ -328,7 +328,12 @@ namespace recompui {
+                 "Framerate",
+                 get_framerate_text(60),
+                 refresh_rate_options,
++#if defined(__PROSPERO__)
++                // The console's output is a fixed 60 Hz: interpolate the game's frames to it.
++                ultramodern::renderer::RefreshRate::Manual
++#else
+                 ultramodern::renderer::RefreshRate::Variable
++#endif
+             );
+ 
+             config.add_number_option(
 diff --git a/recompui/src/renderer/rt64_render_context.cpp b/recompui/src/renderer/rt64_render_context.cpp
 index a3edb30..27ba9fe 100644
 --- a/recompui/src/renderer/rt64_render_context.cpp
