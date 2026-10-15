@@ -1,8 +1,20 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 2fcd26a..49505a9 100644
+index 741aa0a..c9f2ead 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -108,6 +108,10 @@ target_sources(RecompiledFuncs PRIVATE ${FUNC_C_SOURCES} ${FUNC_CXX_SOURCES})
+@@ -40,6 +40,11 @@ add_compile_definitions(
+ # a submodule, write its patch again with `python tools/lib_patch.py save` before committing.
+ find_package(Git REQUIRED)
+ file(GLOB LIB_PATCHES "${CMAKE_SOURCE_DIR}/lib/patches/*.patch")
++if (PS5)
++    # The PS5 port's tools/setup-source.sh applies these and commits them in each submodule. The port's own patches
++    # change some of the same lines, which the check below takes for a patch that isn't applied.
++    set(LIB_PATCHES "")
++endif()
+ foreach(LIB_PATCH ${LIB_PATCHES})
+     get_filename_component(LIB_NAME ${LIB_PATCH} NAME_WE)
+     set(LIB_DIR "${CMAKE_SOURCE_DIR}/lib/${LIB_NAME}")
+@@ -108,6 +113,10 @@ target_sources(RecompiledFuncs PRIVATE ${FUNC_C_SOURCES} ${FUNC_CXX_SOURCES})
  
  # Main executable
  add_executable(Rush2Recompiled)
@@ -26,11 +38,58 @@ index f933a25..5fc1fc8 100644
          }
          if (signature == model_signature) return;
          model_signature = signature;
+diff --git a/src/config.cpp b/src/config.cpp
+index b674433..c63d1bb 100644
+--- a/src/config.cpp
++++ b/src/config.cpp
+@@ -872,7 +872,11 @@ void rush2::init_config() {
+         create_ordered_tab(general::tab_name, "rush2_general", general::id, {
+             { "Gameplay", { car_stats_option::id, torque_option::id, stunt_gear_option::id, hide_respawn_option::id,
+                             catch_up_option::id, pause_extras_option::id, circuit_review_option::id, more_circuit_option::id, circuit_fixed_difficulty_option::id, ghost_option::id, ghosts_kept_option::id } },
++#if defined(__PROSPERO__)
++            { "System", { general::options::background_input_mode, menu_background_option::id } },
++#else
+             { "System", { general::options::background_input_mode, menu_background_option::id, data_location_option::id } },
++#endif
+         }, nullptr, {
+             { "Gameplay", [](rush2::ui::OptionsPage* page) {
+                 rush2::npc_cars::add_section(page->get_list(), page->text_shower(rush2::npc_cars::description));
+@@ -909,7 +913,10 @@ void rush2::init_config() {
+     add_more_circuit_option(general_config);
+     add_circuit_fixed_difficulty_option(general_config);
+     add_menu_background_option(general_config);
++#if !defined(__PROSPERO__)
++    // A PS5 title keeps its data in the title folder; Portable mode can't work there (see recompui's file.cpp).
+     add_data_location_option(general_config);
++#endif
+ 
+     auto& graphics_config = recompui::config::create_graphics_tab();
+     customize_graphics_options(graphics_config);
+diff --git a/src/controls.cpp b/src/controls.cpp
+index fed2ac0..3ce394f 100644
+--- a/src/controls.cpp
++++ b/src/controls.cpp
+@@ -283,8 +283,14 @@ namespace {
+     };
+     std::array<Listen, num_ports> listens{};
+ 
+-    // Buttons that can't be bound: Start pauses and the frontend uses Back and Guide to open its menu.
++    // Buttons that can't be bound: Start pauses and the frontend uses Back and Guide to open its menu
++    // (the touchpad on the PS5, which keeps Back and Guide for itself).
+     bool reserved_button(int b) {
++#if defined(__PROSPERO__)
++        if (b == SDL_CONTROLLER_BUTTON_TOUCHPAD) {
++            return true;
++        }
++#endif
+         return b == SDL_CONTROLLER_BUTTON_START || b == SDL_CONTROLLER_BUTTON_BACK || b == SDL_CONTROLLER_BUTTON_GUIDE;
+     }
+     // Return pauses and Escape opens the frontend's menu.
 diff --git a/src/main.cpp b/src/main.cpp
-index 0d3da4e..e29397e 100644
+index ca89ebc..8ae8b50 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
-@@ -61,12 +61,19 @@
+@@ -62,12 +62,19 @@
  #include "SDL_syswm.h"
  #endif
  
@@ -50,7 +109,7 @@ index 0d3da4e..e29397e 100644
      assert(false);
      ultramodern::error_handling::quick_exit(__FILE__, __LINE__, __FUNCTION__);
  }
-@@ -136,7 +143,12 @@ ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::
+@@ -137,7 +144,12 @@ ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::
      flags |= SDL_WINDOW_VULKAN;
  #endif
  
@@ -63,7 +122,7 @@ index 0d3da4e..e29397e 100644
  
      if (window == nullptr) {
          exit_error("Failed to create window: %s\n", SDL_GetError());
-@@ -154,7 +166,7 @@ ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::
+@@ -155,7 +167,7 @@ ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::
  #if defined(_WIN32)
      rush2::steam_input_filter::install(wmInfo.info.win.window);
      return ultramodern::renderer::WindowHandle{ wmInfo.info.win.window, GetCurrentThreadId() };
@@ -72,7 +131,7 @@ index 0d3da4e..e29397e 100644
      return ultramodern::renderer::WindowHandle{ window };
  #elif defined(__APPLE__)
      SDL_MetalView view = SDL_Metal_CreateView(window);
-@@ -383,7 +395,12 @@ static void auto_import_rom(int argc, char** argv) {
+@@ -384,7 +396,12 @@ static void auto_import_rom(int argc, char** argv) {
          }
      }
      std::error_code ec;
@@ -85,7 +144,7 @@ index 0d3da4e..e29397e 100644
      for (const auto& dir : { cwd, cwd.parent_path() }) {
          for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
              auto ext = entry.path().extension().string();
-@@ -536,6 +553,9 @@ static void launcher_update(recompui::LauncherMenu*) {
+@@ -537,6 +554,9 @@ static void launcher_update(recompui::LauncherMenu*) {
  }
  
  int main(int argc, char** argv) {
@@ -95,6 +154,259 @@ index 0d3da4e..e29397e 100644
      recomp::Version project_version{};
      if (!recomp::Version::from_string(version_string, project_version)) {
          ultramodern::error_handling::message_box(("Invalid version string: " + version_string).c_str());
+@@ -652,7 +672,14 @@ int main(int argc, char** argv) {
+     };
+ 
+     ultramodern::events::callbacks_t thread_callbacks{
++#if defined(__PROSPERO__)
++        .vi_callback = [] {
++            rush2::input::update_rumble();
++            rush2::ps5::update_light_bars();
++        },
++#else
+         .vi_callback = rush2::input::update_rumble,
++#endif
+         .gfx_init_callback = nullptr,
+     };
+ 
+diff --git a/src/rumble.cpp b/src/rumble.cpp
+index b6350ba..6f97393 100644
+--- a/src/rumble.cpp
++++ b/src/rumble.cpp
+@@ -36,6 +36,10 @@
+ #include "recomp.h"
+ #include "rush2_hooks.h"
+ #include "rush2.h"
++#if defined(__PROSPERO__)
++#include "paint_colors.h"
++#include "ps5_platform.h"
++#endif
+ 
+ namespace {
+     // Offsets in the car struct.
+@@ -155,6 +159,10 @@ extern "C" void rush2_rumble_impact(uint8_t* rdram, recomp_context* ctx) {
+     if (port >= num_ports) {
+         return;
+     }
++#if defined(__PROSPERO__)
++    // The light bar shows the car's MAIN COLOR (physics car +0x7EB, docs/npc_cars.md; ps5/ps5_platform.h).
++    rush2::ps5::set_light_bar(port, rush2::paint_colors::rgba(MEM_BU(0x7EB, ctx->r6)));
++#endif
+     if (rush2::input::take_rumble_impact_reset(port)) {
+         have_previous[port] = false;
+     }
+diff --git a/src/rush1/rush1_rom.cpp b/src/rush1/rush1_rom.cpp
+index da991fa..7a0b771 100644
+--- a/src/rush1/rush1_rom.cpp
++++ b/src/rush1/rush1_rom.cpp
+@@ -32,6 +32,9 @@
+ #include "track1.h"
+ #include "track2049_convert.h"
+ #include "wings_internal.h"
++#if defined(__PROSPERO__)
++#include "ps5_platform.h"
++#endif
+ 
+ namespace {
+     // In the Games tab's config, games.json (src/rush2049/wings.cpp).
+@@ -98,7 +101,11 @@ namespace {
+     std::string rom_status_text() {
+         return rush2::track1::rom_available()
+             ? "ROM found."
++#if defined(__PROSPERO__)
++            : "Needs a San Francisco Rush (USA) ROM for its tracks. Put it in the title folder and restart the game.";
++#else
+             : "Needs a San Francisco Rush (USA) ROM for its tracks.";
++#endif
+     }
+ 
+     void update_rom_ui() {
+@@ -229,8 +236,11 @@ void rush2::track1::init_config() {
+ void rush2::track1::add_games_section(rush2::ui::OptionsPage* page, std::function<void()>& refresh) {
+     recompui::ContextId context = recompui::get_current_context();
+     rush2::ui::OptionsPage::Heading heading = page->add_heading("San Francisco Rush", rom_status_text());
++#if !defined(__PROSPERO__)
++    // The PS5 has no file dialog: load_config imports a ROM from the title folder.
+     auto* button = context.create_element<recompui::Button>(heading.row, "Select ROM", recompui::ButtonStyle::Secondary);
+     button->add_pressed_callback(select_rom);
++#endif
+     page->add_option(rush2::wings::games_config(), tracks_option_id);
+     page->add_option(rush2::wings::games_config(), stripes_option_id);
+     refresh = [note = heading.note, shown = rush2::track1::rom_available()]() mutable {
+@@ -243,6 +253,12 @@ void rush2::track1::add_games_section(rush2::ui::OptionsPage* page, std::functio
+ 
+ // Runs after rush2::wings::load_config(), which loads the option.
+ void rush2::track1::load_config() {
++#if defined(__PROSPERO__)
++    // No file dialog on the PS5: a San Francisco Rush (USA) ROM in the title folder is stored as rush1.z64.
++    rush2::ps5::import_rom(stored_rom_path(), "NSF", rom_size, [](const std::filesystem::path& path, std::vector<uint8_t>& out) {
++        return read_rom(path, out) == RomCheck::Good;
++    });
++#endif
+     std::vector<uint8_t> data;
+     std::filesystem::path path = stored_rom_path();
+     if (std::filesystem::exists(path)) {
+diff --git a/src/rush2049/wings.cpp b/src/rush2049/wings.cpp
+index e6c687f..652b158 100644
+--- a/src/rush2049/wings.cpp
++++ b/src/rush2049/wings.cpp
+@@ -36,6 +36,9 @@
+ #include "car2049.h"
+ #include "track2049.h"
+ #include "wings_internal.h"
++#if defined(__PROSPERO__)
++#include "ps5_platform.h"
++#endif
+ #include "rush2049_dc.h"
+ #include "texture_upscale.h"
+ #include "odometer2049.h"
+@@ -153,7 +156,12 @@ namespace {
+         }
+         auto rom = rush2::wings::get_rom();
+         if (rom == nullptr) {
++#if defined(__PROSPERO__)
++            return "Needs a San Francisco Rush 2049 (USA) N64 ROM for its tracks, cars and wings. Put it in the title "
++                   "folder and restart the game.";
++#else
+             return "Needs a San Francisco Rush 2049 (USA) N64 ROM or Dreamcast disc for its tracks, cars and wings.";
++#endif
+         }
+         return rom->is_dreamcast() ? "Using the Dreamcast disc (experimental: some content untested)."
+                                    : "Using the N64 ROM.";
+@@ -462,8 +470,11 @@ void rush2::wings::init_config() {
+ void rush2::wings::add_games_section(rush2::ui::OptionsPage* page, std::function<void()>& refresh) {
+     recompui::ContextId context = recompui::get_current_context();
+     rush2::ui::OptionsPage::Heading heading = page->add_heading("Rush 2049", rom_status_text());
++#if !defined(__PROSPERO__)
++    // The PS5 has no file dialog: load_config imports a ROM from the title folder.
+     auto* button = context.create_element<recompui::Button>(heading.row, "Select ROM", recompui::ButtonStyle::Secondary);
+     button->add_pressed_callback(select_rom);
++#endif
+     for (const std::string& id : { source_option_id, wings_option_id, tracks_option_id, cars_option_id, drones_option_id,
+                                     speeds_option_id, odometer_option_id }) {
+         page->add_option(wings_config, id);
+@@ -485,6 +496,12 @@ void rush2::wings::save_config() {
+ void rush2::wings::load_config() {
+     wings_config.load_config();
+     rush2::wings::load_styles();
++#if defined(__PROSPERO__)
++    // No file dialog on the PS5: a Rush 2049 (USA) N64 ROM in the title folder is stored as rush2049.z64.
++    rush2::ps5::import_rom(stored_rom_path(), "NRU", rom_size, [](const std::filesystem::path& path, std::vector<uint8_t>& out) {
++        return read_rom(path, out) == RomCheck::Good;
++    });
++#endif
+     load_chosen_source();
+     config_loaded = true;
+     update_rom_ui();
+diff --git a/src/rush2049/wings_menu.cpp b/src/rush2049/wings_menu.cpp
+index 9a1da0e..33c2ee4 100644
+--- a/src/rush2049/wings_menu.cpp
++++ b/src/rush2049/wings_menu.cpp
+@@ -35,6 +35,10 @@
+ #include "data_files.h"
+ #include "players4.h"
+ #include "wings_internal.h"
++#if defined(__PROSPERO__)
++#include "paint_colors.h"
++#include "ps5_platform.h"
++#endif
+ 
+ namespace {
+     constexpr uint32_t option_ids = 0x803CB3B8;     // s32 [16]: the rows' option ids
+@@ -143,6 +147,24 @@ namespace {
+         return slot + (rush2::players4::car_select_second_round() ? 2 : 0);
+     }
+ 
++#if defined(__PROSPERO__)
++    // The light bar of the controller choosing in a slot shows the MAIN COLOR row of the car in the slot
++    // (ps5/ps5_platform.h). The slot's record is the chooser's, also in the second round (players 3 and 4). A
++    // Dreamcast car's MAIN row is its STYLE, but the PS5 can't add the disc, so every car here has a color.
++    void light_bar_slot(uint8_t* rdram, int slot) {
++        if (slot < 0 || slot > 1) {
++            return;
++        }
++        int port = MEM_BU(1, rush2::players4::record(slot));
++        int type = slot_car(rdram, slot);
++        if (type < 0 || type >= rush2::car2049::types) {
++            return;
++        }
++        int color = (int8_t)MEM_B(0, (int32_t)(main_colour + slot * rush2::car2049::types + type));
++        rush2::ps5::set_light_bar(port, rush2::paint_colors::rgba(color));
++    }
++#endif
++
+     // The offset that, added to 0x800C0000 and read at +0x4924, reads the label pointer at ptr.
+     uint64_t label_offset(uint32_t ptr) {
+         return (uint64_t)(int64_t)(int32_t)(ptr - label_table);
+@@ -159,6 +181,9 @@ extern "C" void rush2_car_rows_built(uint8_t* rdram, recomp_context* ctx) {
+ // func_803B9478's per-slot loop at 0x803B951C (slot $s7) and func_803BC048's at 0x803BC0C8 (slot $s2).
+ extern "C" void rush2_car_rows_frame(uint8_t* rdram, recomp_context* ctx) {
+     use_slot(rdram, (int32_t)ctx->r23);
++#if defined(__PROSPERO__)
++    light_bar_slot(rdram, (int32_t)ctx->r23);
++#endif
+ }
+ 
+ extern "C" void rush2_car_rows_text(uint8_t* rdram, recomp_context* ctx) {
+diff --git a/src/texture_upscale.cpp b/src/texture_upscale.cpp
+index 51f51fa..8848ce7 100644
+--- a/src/texture_upscale.cpp
++++ b/src/texture_upscale.cpp
+@@ -149,7 +149,9 @@ namespace {
+     void open_folder(const std::filesystem::path& folder) {
+         std::error_code ec;
+         std::filesystem::create_directories(folder, ec);
+-#ifdef _WIN32
++#if defined(__PROSPERO__)
++        // No file browser on the PS5; the folder is reached over FTP.
++#elif defined(_WIN32)
+         ShellExecuteW(nullptr, L"open", folder.wstring().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+ #elif defined(__APPLE__)
+         std::thread([folder]() { run_command("open " + quoted(folder)); }).detach();
+@@ -2314,16 +2316,24 @@ void add_buttons(rush2::ui::OptionsPage* page) {
+     });
+ 
+     row = page->add_row(
++#if defined(__PROSPERO__)
++        "The asset_dump folder in the title folder (over FTP) has the dumped textures in textures, the models in "
++        "models. "
++#else
+         "<recomp-color primary>Open Dump Folder</recomp-color> shows the asset_dump folder: the dumped textures in "
+-        "textures, the models in models. Save your upscaled textures in user_texture_pack, in the same folders and "
++        "textures, the models in models. "
++#endif
++        "Save your upscaled textures in user_texture_pack, in the same folders and "
+         "keeping the file names, then press <recomp-color primary>Install Upscaled Textures</recomp-color> to use "
+         "them.");
++#if !defined(__PROSPERO__)
+     Button* folder_button = context.create_element<Button>(row, "Open Dump Folder", ButtonStyle::Secondary);
+     folder_button->add_pressed_callback([]() {
+         std::error_code ec;
+         std::filesystem::create_directories(asset_dump_dir(), ec);
+         open_folder(asset_dump_dir());
+     });
++#endif
+ 
+     Button* install_button = context.create_element<Button>(row, "Install Upscaled Textures", ButtonStyle::Secondary);
+     // An install still running from before the page was last closed shows here until it ends.
+diff --git a/src/texture_upscale_images.cpp b/src/texture_upscale_images.cpp
+index d3dcb45..39b55db 100644
+--- a/src/texture_upscale_images.cpp
++++ b/src/texture_upscale_images.cpp
+@@ -765,7 +765,12 @@ bool write_png(const std::filesystem::path& path, const Image& image) {
+ }
+ 
+ int run_command(const std::string& command_line, const std::atomic<bool>* cancel) {
+-#ifdef _WIN32
++#if defined(__PROSPERO__)
++    // A PS5 title can't start programs: posix_spawnp is an import the title doesn't resolve, and calling it crashes.
++    (void)command_line;
++    (void)cancel;
++    return -1;
++#elif defined(_WIN32)
+     int wide_length = MultiByteToWideChar(CP_UTF8, 0, command_line.c_str(), -1, nullptr, 0);
+     std::wstring wide(wide_length, L'\0');
+     MultiByteToWideChar(CP_UTF8, 0, command_line.c_str(), -1, wide.data(), wide_length);
 diff --git a/src/track_cache.cpp b/src/track_cache.cpp
 index 78f4204..7b042f8 100644
 --- a/src/track_cache.cpp

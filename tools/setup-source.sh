@@ -11,7 +11,7 @@ rom=${1:?usage: tools/setup-source.sh <Rush 2 USA ROM>}
 rom=$(realpath "$rom")
 
 upstream_url=https://github.com/bryantmh/rush2recompiled
-upstream_commit=5a60c91b4bf092a4f50a3ae315b990214bcc0f9b   # v1.0.18
+upstream_commit=988e02816be909afad182d4d5d9e060edf7de147   # v1.0.19
 src="$root/src-upstream"
 
 if [[ ! -d $src ]]; then

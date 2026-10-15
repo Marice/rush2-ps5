@@ -1,5 +1,7 @@
-// Start-up of Rush 2 Recompiled as a PS5 title: the log file and SDL's video driver.
+// Start-up of Rush 2 Recompiled as a PS5 title: the log file and SDL's video driver, the import of the
+// SF Rush and Rush 2049 ROMs, and the controllers' light bars in the car colors.
 #include "ps5_platform.h"
+#include "rush2.h"
 
 #include <SDL.h>
 
@@ -8,15 +10,20 @@
 #include <ucontext.h>
 #include <unistd.h>
 
+#include <array>
 #include <chrono>
 #include <atomic>
+#include <mutex>
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include <exception>
+#include <fstream>
+#include <string>
 #include <thread>
+#include <utility>
 
 int main(int argc, char** argv);
 extern "C" int sceSystemServiceHideSplashScreen(void);
@@ -166,3 +173,97 @@ void rush2::ps5::flush_log() {
     std::fflush(stderr);
     std::fflush(stdout);
 }
+
+namespace {
+    // The 3-letter game code at 0x3B of an N64 ROM's header, in any of the three byte orders; "" if the file
+    // has no N64 ROM header.
+    std::string header_game_code(const std::filesystem::path& path) {
+        uint8_t header[0x40];
+        std::ifstream file{ path, std::ios::binary };
+        if (!file.read(reinterpret_cast<char*>(header), sizeof(header))) {
+            return {};
+        }
+        bool byteswapped = header[0] == 0x37 && header[1] == 0x80 && header[2] == 0x40 && header[3] == 0x12;
+        bool little_endian = header[0] == 0x40 && header[1] == 0x12 && header[2] == 0x37 && header[3] == 0x80;
+        bool big_endian = header[0] == 0x80 && header[1] == 0x37 && header[2] == 0x12 && header[3] == 0x40;
+        if (!big_endian && !byteswapped && !little_endian) {
+            return {};
+        }
+        for (size_t i = 0; i < sizeof(header); i += 4) {
+            if (byteswapped) {
+                std::swap(header[i], header[i + 1]);
+                std::swap(header[i + 2], header[i + 3]);
+            }
+            else if (little_endian) {
+                std::swap(header[i], header[i + 3]);
+                std::swap(header[i + 1], header[i + 2]);
+            }
+        }
+        return std::string(reinterpret_cast<const char*>(&header[0x3B]), 3);
+    }
+}
+
+bool rush2::ps5::import_rom(const std::filesystem::path& stored, const char* game_code, size_t size, const RomReader& read) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    if (fs::exists(stored, ec)) {
+        return false;
+    }
+    for (const auto& entry : fs::directory_iterator(stored.parent_path(), ec)) {
+        const fs::path& path = entry.path();
+        std::string ext = path.extension().string();
+        // Lower case only, as for the Rush 2 ROM (main.cpp's auto_import_rom).
+        if ((ext != ".z64" && ext != ".n64" && ext != ".v64") || !entry.is_regular_file(ec) ||
+            entry.file_size(ec) != size || header_game_code(path) != game_code) {
+            continue;
+        }
+        std::vector<uint8_t> data;
+        if (!read(path, data)) {
+            printf("[PS5] Skipped %s: not the USA version this needs\n", path.string().c_str());
+            continue;
+        }
+        std::ofstream out{ stored, std::ios::binary };
+        if (!out.write(reinterpret_cast<const char*>(data.data()), data.size())) {
+            out.close();
+            fs::remove(stored, ec);
+            printf("[PS5] Failed to write %s\n", stored.string().c_str());
+            return false;
+        }
+        printf("[PS5] Imported %s as %s\n", path.string().c_str(), stored.filename().string().c_str());
+        return true;
+    }
+    return false;
+}
+
+namespace {
+    // The car color each port's light bar should show (0: none chosen yet, the system's color stays), set from the
+    // game thread; and what was last sent, to which controller, on the VI thread.
+    constexpr int light_bar_ports = 4;
+    std::array<std::atomic<uint32_t>, light_bar_ports> light_bar_wanted{};
+    std::array<int32_t, light_bar_ports> light_bar_controller{ -1, -1, -1, -1 };
+    std::array<uint32_t, light_bar_ports> light_bar_sent{};
+}
+
+void rush2::ps5::set_light_bar(int port, uint32_t rgba) {
+    if (port >= 0 && port < light_bar_ports) {
+        light_bar_wanted[port].store(rgba | 0xFF, std::memory_order_relaxed); // Never 0 once a color is set.
+    }
+}
+
+void rush2::ps5::update_light_bars() {
+    std::lock_guard lock{ rush2::input::sdl_device_mutex() };
+    for (int port = 0; port < light_bar_ports; port++) {
+        uint32_t wanted = light_bar_wanted[port].load(std::memory_order_relaxed);
+        int32_t id = rush2::input::get_port_controller(port);
+        if (wanted == 0 || id < 0 || (id == light_bar_controller[port] && wanted == light_bar_sent[port])) {
+            continue;
+        }
+        // Sent once per change even if it fails, so a pad without a light bar isn't asked again every VI.
+        light_bar_controller[port] = id;
+        light_bar_sent[port] = wanted;
+        if (SDL_GameController* controller = SDL_GameControllerFromInstanceID(id)) {
+            SDL_GameControllerSetLED(controller, uint8_t(wanted >> 24), uint8_t(wanted >> 16), uint8_t(wanted >> 8));
+        }
+    }
+}
+

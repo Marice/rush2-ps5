@@ -1,3 +1,20 @@
+diff --git a/recompinput/src/input_mapping.cpp b/recompinput/src/input_mapping.cpp
+index bfcfef4..02b7666 100644
+--- a/recompinput/src/input_mapping.cpp
++++ b/recompinput/src/input_mapping.cpp
+@@ -54,7 +54,12 @@ namespace recompinput {
+         { GameInput::Y_AXIS_POS,     { InputField::controller_analog( SDL_CONTROLLER_AXIS_LEFTY, false) } },
+         { GameInput::Y_AXIS_NEG,     { InputField::controller_analog( SDL_CONTROLLER_AXIS_LEFTY, true) } },
+ 
++#if defined(__PROSPERO__)
++        // The PS5 keeps the Create (Back) and PS (Guide) buttons for itself; the touchpad click opens the menu.
++        { GameInput::TOGGLE_MENU,    { InputField::controller_digital(SDL_CONTROLLER_BUTTON_TOUCHPAD) } },
++#else
+         { GameInput::TOGGLE_MENU,    { InputField::controller_digital(SDL_CONTROLLER_BUTTON_BACK) } },
++#endif
+         { GameInput::ACCEPT_MENU,    { InputField::controller_digital(SDL_CONTROLLER_BUTTON_SOUTH) } },
+         { GameInput::BACK_MENU,      { InputField::controller_digital(SDL_CONTROLLER_BUTTON_WEST) } },
+         { GameInput::APPLY_MENU,     { InputField::controller_digital(SDL_CONTROLLER_BUTTON_NORTH), InputField::controller_digital(SDL_CONTROLLER_BUTTON_START) } },
 diff --git a/recompui/src/base/ui_state.cpp b/recompui/src/base/ui_state.cpp
 index b347a8c..2bc3e26 100644
 --- a/recompui/src/base/ui_state.cpp
@@ -12,7 +29,7 @@ index b347a8c..2bc3e26 100644
  #endif
      ui_state = std::make_unique<UIState>(window, interface, device);
 diff --git a/recompui/src/composites/ui_mod_installer.cpp b/recompui/src/composites/ui_mod_installer.cpp
-index 1f98b3c..af59552 100644
+index 7031967..2bc09d3 100644
 --- a/recompui/src/composites/ui_mod_installer.cpp
 +++ b/recompui/src/composites/ui_mod_installer.cpp
 @@ -15,6 +15,10 @@ namespace recompui {
@@ -27,10 +44,10 @@ index 1f98b3c..af59552 100644
          static_assert(false, "Unimplemented for this platform.");
  #endif
 diff --git a/recompui/src/composites/ui_mod_menu.cpp b/recompui/src/composites/ui_mod_menu.cpp
-index 02455fd..68e4e02 100644
+index 09768c5..c599900 100644
 --- a/recompui/src/composites/ui_mod_menu.cpp
 +++ b/recompui/src/composites/ui_mod_menu.cpp
-@@ -295,6 +295,9 @@ void ModMenu::open_mods_folder() {
+@@ -301,6 +301,9 @@ void ModMenu::open_mods_folder() {
  #elif defined(__linux__)
      std::string command = "xdg-open \"" + mods_directory.string() + "\" &";
      std::system(command.c_str());
@@ -80,10 +97,24 @@ index a3edb30..27ba9fe 100644
  #elif defined(__APPLE__)
      appCore.window.window = window_handle.window;
 diff --git a/recompui/src/util/file.cpp b/recompui/src/util/file.cpp
-index 7ee84ed..35ac306 100644
+index 7ee84ed..1025648 100644
 --- a/recompui/src/util/file.cpp
 +++ b/recompui/src/util/file.cpp
-@@ -83,6 +83,9 @@ namespace recompui {
+@@ -59,10 +59,13 @@ namespace recompui {
+     }
+ 
+     std::filesystem::path file::get_app_folder_path() {
++#if !defined(__PROSPERO__)
+         // directly check for portable.txt (windows and native linux binary)
++        // Not on the PS5: a title has no working directory, and current_path() calls a getcwd that isn't there.
+         if (std::filesystem::exists("portable.txt")) {
+             return std::filesystem::current_path();
+         }
++#endif
+ 
+ #if defined(__APPLE__)
+         // Check for portable file in the directory containing the app bundle.
+@@ -83,6 +86,9 @@ namespace recompui {
          }
  
          CoTaskMemFree(known_path);
@@ -93,7 +124,7 @@ index 7ee84ed..35ac306 100644
  #elif defined(__linux__) || defined(__APPLE__)
          // check for APP_FOLDER_PATH env var
          if (getenv("APP_FOLDER_PATH") != nullptr) {
-@@ -119,6 +122,8 @@ namespace recompui {
+@@ -119,6 +125,8 @@ namespace recompui {
          return file::apple::get_bundle_resource_directory();
  #elif defined(__linux__) && defined(RECOMP_FLATPAK)
          return "/app/bin";
