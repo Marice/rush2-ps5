@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). Versions follow
 the title's `contentVersion` in `sce_sys/param.json`.
 
-## [Unreleased]
+## [00.002.000] - 2026-10-15
 
 ### Added
 - The DualSense light bar shows the player's car color (MAIN COLOR), in the car
