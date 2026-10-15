@@ -5,7 +5,8 @@
 #   ./build.sh [build]     compile (after configure)
 set -euo pipefail
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-: "${PACBREW:=$HOME/development/workspace/trimui/olise-player/.deps/pacbrew/v0.40.2/sysroot/user/homebrew}"
+# The PacBrew sysroot (SDL2, FreeType...): downloaded into .deps/ by tools/setup-pacbrew.sh unless PACBREW is set.
+: "${PACBREW:=$("$root/tools/setup-pacbrew.sh")}"
 export PACBREW
 sdk="$root/radv/mihawk-vulkan-review/.deps/native/ps5-payload-sdk"
 env="export PS5_PAYLOAD_SDK=$sdk RADV_ROOT=$root/radv/mihawk-vulkan-review PACBREW=$PACBREW RUSH2_HOST_TOOLS=$root/build-host/file_to_c;"

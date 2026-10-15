@@ -2,6 +2,7 @@
 /src-upstream/
 /radv/
 /build*/
+/.deps/
 /dist/
 # ROMs and anything derived from them
 *.n64
