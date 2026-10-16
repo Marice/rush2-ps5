@@ -11,7 +11,9 @@
 #include <unistd.h>
 
 #include <array>
+#include <algorithm>
 #include <chrono>
+#include <condition_variable>
 #include <atomic>
 #include <mutex>
 #include <cstdarg>
@@ -267,3 +269,108 @@ void rush2::ps5::update_light_bars() {
     }
 }
 
+
+// ---- The console's beeper and light at a race start, through ps5-signal ----------------------------------------
+// ps5-signal (github.com/Marice/ps5-signal) is a payload that plays beeps and LED patterns for homebrew over HTTP
+// on 127.0.0.1:9150; ps5_signal.h is its client. When it doesn't run, every request fails at once and nothing
+// happens. The countdown (game mode 9) shows 3, 2 and 1, then the race (mode 3) starts with RUSH!: three short beeps
+// a tick apart and an amber flash per tick, then a long beep and the LEDs cycling. The service puts the player's own
+// colour back after a light pattern.
+
+#define PS5_SIGNAL_IMPLEMENTATION
+#include "ps5_signal.h"
+
+namespace {
+    constexpr int32_t mode_countdown = 9;
+    constexpr int32_t mode_racing = 3;
+    // A tick of the countdown until one was measured: then a third of how long the last countdown lasted.
+    constexpr int default_tick_ms = 1000;
+
+    std::atomic<bool> race_signal_enabled{ true };
+    int32_t race_signal_mode = -1;
+    std::chrono::steady_clock::time_point countdown_started;
+    int tick_ms = default_tick_ms;
+
+    // The requests go out on a thread of their own: each can take up to 2 seconds when the service hangs.
+    std::mutex signal_mutex;
+    std::condition_variable signal_wake;
+    std::vector<std::pair<std::string, std::string>> signal_queue; // { beep pattern, LED pattern }
+
+    void signal_thread() {
+        while (true) {
+            std::pair<std::string, std::string> request;
+            {
+                std::unique_lock lock{ signal_mutex };
+                signal_wake.wait(lock, [] { return !signal_queue.empty(); });
+                request = std::move(signal_queue.front());
+                signal_queue.erase(signal_queue.begin());
+            }
+            const int beep = ps5_signal_beep(request.first.c_str());
+            const int led = ps5_signal_led(request.second.c_str(), 1);
+            if (beep != 202 || led != 202) {
+                std::printf("[ps5-signal] race start: beep %d, led %d (-1: ps5-signal isn't running)\n", beep, led);
+            }
+        }
+    }
+
+    void send_signal(std::string beep, std::string led) {
+        static std::once_flag started;
+        std::call_once(started, [] { std::thread(signal_thread).detach(); });
+        {
+            std::lock_guard lock{ signal_mutex };
+            signal_queue.emplace_back(std::move(beep), std::move(led));
+        }
+        signal_wake.notify_one();
+    }
+
+    // 3, 2, 1: three short beeps a tick apart; an amber flash on each, ending before RUSH! needs the light.
+    void signal_countdown() {
+        char beep[160];
+        std::snprintf(beep, sizeof(beep), "[{\"tone\":1,\"pause_ms\":%d},{\"tone\":1,\"pause_ms\":%d},{\"tone\":1}]",
+                      tick_ms, tick_ms);
+        const int dark = std::max(tick_ms - 250, 250);
+        char led[256];
+        std::snprintf(led, sizeof(led),
+                      "[{\"color\":\"orange\",\"ms\":250},{\"color\":\"off\",\"ms\":%d},"
+                      "{\"color\":\"orange\",\"ms\":250},{\"color\":\"off\",\"ms\":%d},{\"color\":\"orange\",\"ms\":250}]",
+                      dark, dark);
+        send_signal(beep, led);
+    }
+
+    // RUSH!: a long beep and the LEDs cycling twice.
+    void signal_go() {
+        send_signal("[{\"tone\":3}]",
+                    "[{\"color\":\"blue\",\"ms\":250},{\"color\":\"white\",\"ms\":250},{\"color\":\"orange\",\"ms\":250},"
+                    "{\"color\":\"blue\",\"ms\":250},{\"color\":\"white\",\"ms\":250},{\"color\":\"orange\",\"ms\":250}]");
+    }
+}
+
+void rush2::ps5::set_race_signal(bool enabled) {
+    race_signal_enabled.store(enabled, std::memory_order_relaxed);
+}
+
+void rush2::ps5::update_race_signal(int32_t game_mode) {
+    const int32_t previous = race_signal_mode;
+    race_signal_mode = game_mode;
+    if (game_mode == previous) {
+        return;
+    }
+    const auto now = std::chrono::steady_clock::now();
+    if (game_mode == mode_countdown) {
+        countdown_started = now;
+        if (race_signal_enabled.load(std::memory_order_relaxed)) {
+            signal_countdown();
+        }
+    }
+    else if (game_mode == mode_racing && previous == mode_countdown) {
+        // The countdown shows three numbers: the next race's tick is a third of this one's length.
+        const auto lasted = std::chrono::duration_cast<std::chrono::milliseconds>(now - countdown_started).count();
+        std::printf("[ps5-signal] the countdown lasted %lld ms\n", (long long)lasted);
+        if (lasted >= 900 && lasted <= 9000) {
+            tick_ms = std::clamp((int)(lasted / 3), 300, 2000);
+        }
+        if (race_signal_enabled.load(std::memory_order_relaxed)) {
+            signal_go();
+        }
+    }
+}

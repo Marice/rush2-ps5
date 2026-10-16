@@ -25,6 +25,19 @@ index 741aa0a..c9f2ead 100644
  
  # The version shown in the launcher is the latest git tag (v1.0.8 -> 1.0.8), read when CMake configures; 0.1.0 without one.
  set(RUSH2_VERSION "0.1.0")
+diff --git a/include/rush2.h b/include/rush2.h
+index d72760e..f861adf 100644
+--- a/include/rush2.h
++++ b/include/rush2.h
+@@ -192,6 +192,8 @@ namespace rush2 {
+ 
+         // Remembers rdram so input reads can tell races from menus. Called from a game thread hook every frame.
+         void set_rdram(uint8_t* rdram);
++        // The game mode (0x8010C0D0), or -1 before the game runs.
++        int32_t game_mode();
+ 
+         // Loads the saved player assignments. Call after the config path is registered.
+         void load_players();
 diff --git a/src/car_mods.cpp b/src/car_mods.cpp
 index f933a25..5fc1fc8 100644
 --- a/src/car_mods.cpp
@@ -39,32 +52,84 @@ index f933a25..5fc1fc8 100644
          if (signature == model_signature) return;
          model_signature = signature;
 diff --git a/src/config.cpp b/src/config.cpp
-index b674433..c63d1bb 100644
+index b674433..70042cb 100644
 --- a/src/config.cpp
 +++ b/src/config.cpp
-@@ -872,7 +872,11 @@ void rush2::init_config() {
+@@ -30,6 +30,9 @@
+ #include "ghost.h"
+ #include "car2049.h"
+ #include "car_probes.h"
++#if defined(__PROSPERO__)
++#include "ps5_platform.h"
++#endif
+ 
+ // Adds every option of the config that the page doesn't have yet, in the config's order (hidden ones stay hidden).
+ static void add_remaining_options(rush2::ui::OptionsPage* page, recomp::config::Config& config, const std::vector<std::string>& added) {
+@@ -814,6 +817,28 @@ static void add_menu_background_option(recomp::config::Config& config) {
+         });
+ }
+ 
++#if defined(__PROSPERO__)
++namespace race_signal_option {
++    const std::string id = "console_race_signal";
++}
++
++// The console's beeper and light at a race start (3, 2, 1, RUSH!) through the ps5-signal payload (ps5/ps5_platform.cpp).
++static void add_race_signal_option(recomp::config::Config& config) {
++    config.add_bool_option(
++        race_signal_option::id,
++        "Console Signal at Race Start",
++        "Beeps the console's beeper on 3, 2 and 1 and gives a long beep on RUSH!, with the console's light flashing "
++        "amber and then cycling. Needs the ps5-signal payload running; without it nothing happens.",
++        true
++    );
++
++    config.add_option_change_callback(race_signal_option::id,
++        [](recomp::config::ConfigValueVariant cur_value, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
++            rush2::ps5::set_race_signal(std::get<bool>(cur_value));
++        });
++}
++#endif
++
+ namespace data_location_option {
+     const std::string id = "data_location";
+     enum class DataLocation : uint32_t { AppData, Portable };
+@@ -872,7 +897,11 @@ void rush2::init_config() {
          create_ordered_tab(general::tab_name, "rush2_general", general::id, {
              { "Gameplay", { car_stats_option::id, torque_option::id, stunt_gear_option::id, hide_respawn_option::id,
                              catch_up_option::id, pause_extras_option::id, circuit_review_option::id, more_circuit_option::id, circuit_fixed_difficulty_option::id, ghost_option::id, ghosts_kept_option::id } },
 +#if defined(__PROSPERO__)
-+            { "System", { general::options::background_input_mode, menu_background_option::id } },
++            { "System", { general::options::background_input_mode, menu_background_option::id, race_signal_option::id } },
 +#else
              { "System", { general::options::background_input_mode, menu_background_option::id, data_location_option::id } },
 +#endif
          }, nullptr, {
              { "Gameplay", [](rush2::ui::OptionsPage* page) {
                  rush2::npc_cars::add_section(page->get_list(), page->text_shower(rush2::npc_cars::description));
-@@ -909,7 +913,10 @@ void rush2::init_config() {
+@@ -909,7 +938,12 @@ void rush2::init_config() {
      add_more_circuit_option(general_config);
      add_circuit_fixed_difficulty_option(general_config);
      add_menu_background_option(general_config);
 +#if !defined(__PROSPERO__)
 +    // A PS5 title keeps its data in the title folder; Portable mode can't work there (see recompui's file.cpp).
      add_data_location_option(general_config);
++#else
++    add_race_signal_option(general_config);
 +#endif
  
      auto& graphics_config = recompui::config::create_graphics_tab();
      customize_graphics_options(graphics_config);
+@@ -992,6 +1026,10 @@ void rush2::init_config() {
+         recompui::config::get_general_config().get_option_value(more_circuit_option::id)));
+     rush2::circuit::set_fixed_difficulty(std::get<bool>(
+         recompui::config::get_general_config().get_option_value(circuit_fixed_difficulty_option::id)));
++#if defined(__PROSPERO__)
++    rush2::ps5::set_race_signal(std::get<bool>(
++        recompui::config::get_general_config().get_option_value(race_signal_option::id)));
++#endif
+     rush2::input::load_players();
+     rush2::controls::load();
+     rush2::wings::load_config();
 diff --git a/src/controls.cpp b/src/controls.cpp
 index fed2ac0..3ce394f 100644
 --- a/src/controls.cpp
@@ -85,8 +150,24 @@ index fed2ac0..3ce394f 100644
          return b == SDL_CONTROLLER_BUTTON_START || b == SDL_CONTROLLER_BUTTON_BACK || b == SDL_CONTROLLER_BUTTON_GUIDE;
      }
      // Return pauses and Escape opens the frontend's menu.
+diff --git a/src/input.cpp b/src/input.cpp
+index ef355e7..982e7c5 100644
+--- a/src/input.cpp
++++ b/src/input.cpp
+@@ -581,6 +581,11 @@ void rush2::input::suppress_until_released(int port) {
+     }
+ }
+ 
++int32_t rush2::input::game_mode() {
++    uint8_t* rdram = game_rdram.load();
++    return rdram == nullptr ? -1 : MEM_W(0, (int32_t)::game_mode); // the address, not this function
++}
++
+ void rush2::input::set_rdram(uint8_t* rdram) {
+     game_rdram = rdram;
+     rush2::control_profiles::update_ports(rdram);
 diff --git a/src/main.cpp b/src/main.cpp
-index ca89ebc..8ae8b50 100644
+index ca89ebc..48e9dad 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -62,12 +62,19 @@
@@ -154,7 +235,7 @@ index ca89ebc..8ae8b50 100644
      recomp::Version project_version{};
      if (!recomp::Version::from_string(version_string, project_version)) {
          ultramodern::error_handling::message_box(("Invalid version string: " + version_string).c_str());
-@@ -652,7 +672,14 @@ int main(int argc, char** argv) {
+@@ -652,7 +672,15 @@ int main(int argc, char** argv) {
      };
  
      ultramodern::events::callbacks_t thread_callbacks{
@@ -162,6 +243,7 @@ index ca89ebc..8ae8b50 100644
 +        .vi_callback = [] {
 +            rush2::input::update_rumble();
 +            rush2::ps5::update_light_bars();
++            rush2::ps5::update_race_signal(rush2::input::game_mode());
 +        },
 +#else
          .vi_callback = rush2::input::update_rumble,

@@ -28,4 +28,10 @@ namespace rush2::ps5 {
     // Sends the light bar colors that changed, also to a controller that took the port since. Once per VI, from the
     // VI callback (next to rush2::input::update_rumble).
     void update_light_bars();
+
+    // The console beeps and lights up at a race start (3, 2, 1, RUSH!) through the ps5-signal payload
+    // (github.com/Marice/ps5-signal) when it runs; without it nothing happens. On by default.
+    void set_race_signal(bool enabled);
+    // Follows the game mode (0x8010C0D0: 9 the countdown, 3 the race; -1 when unknown). Once per VI.
+    void update_race_signal(int32_t game_mode);
 }
