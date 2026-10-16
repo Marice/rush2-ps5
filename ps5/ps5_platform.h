@@ -32,6 +32,7 @@ namespace rush2::ps5 {
     // The console beeps and lights up at a race start (3, 2, 1, RUSH!) through the ps5-signal payload
     // (github.com/Marice/ps5-signal) when it runs; without it nothing happens. On by default.
     void set_race_signal(bool enabled);
-    // Follows the game mode (0x8010C0D0: 9 the countdown, 3 the race; -1 when unknown). Once per VI.
-    void update_race_signal(int32_t game_mode);
+    // Follows the game mode (0x8010C0D0: 10 the race intro, then 9 and 3 as the race starts; -1 when unknown) and
+    // the intro's countdown (the number shown). Once per VI.
+    void update_race_signal(int32_t game_mode, int32_t countdown);
 }

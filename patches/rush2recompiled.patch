@@ -26,15 +26,18 @@ index 741aa0a..c9f2ead 100644
  # The version shown in the launcher is the latest git tag (v1.0.8 -> 1.0.8), read when CMake configures; 0.1.0 without one.
  set(RUSH2_VERSION "0.1.0")
 diff --git a/include/rush2.h b/include/rush2.h
-index d72760e..f861adf 100644
+index d72760e..e1e0d54 100644
 --- a/include/rush2.h
 +++ b/include/rush2.h
-@@ -192,6 +192,8 @@ namespace rush2 {
+@@ -192,6 +192,11 @@ namespace rush2 {
  
          // Remembers rdram so input reads can tell races from menus. Called from a game thread hook every frame.
          void set_rdram(uint8_t* rdram);
 +        // The game mode (0x8010C0D0), or -1 before the game runs.
 +        int32_t game_mode();
++        // The race intro's countdown in whole seconds (0x8010C014, s16: race_start_timer_800AE670 sets it, the
++        // number shown, and the race starts when it reaches 0), or -1 before the game runs.
++        int32_t race_countdown();
  
          // Loads the saved player assignments. Call after the config path is registered.
          void load_players();
@@ -151,10 +154,10 @@ index fed2ac0..3ce394f 100644
      }
      // Return pauses and Escape opens the frontend's menu.
 diff --git a/src/input.cpp b/src/input.cpp
-index ef355e7..982e7c5 100644
+index ef355e7..8f91144 100644
 --- a/src/input.cpp
 +++ b/src/input.cpp
-@@ -581,6 +581,11 @@ void rush2::input::suppress_until_released(int port) {
+@@ -581,6 +581,16 @@ void rush2::input::suppress_until_released(int port) {
      }
  }
  
@@ -163,11 +166,16 @@ index ef355e7..982e7c5 100644
 +    return rdram == nullptr ? -1 : MEM_W(0, (int32_t)::game_mode); // the address, not this function
 +}
 +
++int32_t rush2::input::race_countdown() {
++    uint8_t* rdram = game_rdram.load();
++    return rdram == nullptr ? -1 : MEM_H(0, (int32_t)0x8010C014);
++}
++
  void rush2::input::set_rdram(uint8_t* rdram) {
      game_rdram = rdram;
      rush2::control_profiles::update_ports(rdram);
 diff --git a/src/main.cpp b/src/main.cpp
-index ca89ebc..48e9dad 100644
+index ca89ebc..975adf2 100644
 --- a/src/main.cpp
 +++ b/src/main.cpp
 @@ -62,12 +62,19 @@
@@ -243,7 +251,7 @@ index ca89ebc..48e9dad 100644
 +        .vi_callback = [] {
 +            rush2::input::update_rumble();
 +            rush2::ps5::update_light_bars();
-+            rush2::ps5::update_race_signal(rush2::input::game_mode());
++            rush2::ps5::update_race_signal(rush2::input::game_mode(), rush2::input::race_countdown());
 +        },
 +#else
          .vi_callback = rush2::input::update_rumble,
