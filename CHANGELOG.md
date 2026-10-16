@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). Versions follow
 the title's `contentVersion` in `sce_sys/param.json`.
 
+## [00.003.000] - 2026-10-16
+
+### Added
+- The console counts down with you at a race start, through the
+  [ps5-signal](https://github.com/Marice/ps5-signal) payload when it runs: a
+  short beep and an amber flash on 3, 2 and 1 as the game shows the number, and
+  a long beep with the console's light cycling on RUSH!. On by default; switch
+  it off under General → System → Console Signal at Race Start. Without
+  ps5-signal nothing happens.
+
 ## [00.002.000] - 2026-10-15
 
 ### Added

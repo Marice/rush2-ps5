@@ -22,6 +22,15 @@ The DualSense light bar shows your car's MAIN COLOR: live while you choose it in
 and in the race. Between races it keeps the last color. Each controller shows its own player's
 car. Not tested on a console yet.
 
+## The console's beeper and light at the start
+
+With the [ps5-signal](https://github.com/Marice/ps5-signal) payload running, the console counts down
+with you: a short beep and an amber flash on 3, 2 and 1, the moment the game shows the number, and a
+long beep with the console's light cycling on RUSH!. Afterwards the light returns to your own colour.
+Without ps5-signal nothing happens. Switch it off under **General → System → Console Signal at Race
+Start**. The easiest way to run ps5-signal is the
+[Signal Companion](https://github.com/Marice/ps5-signal-companion) app. Tested on one console.
+
 ## The Rush 2 Recompiled menu
 
 Rush 2 Recompiled adds its own menu over the game, with settings the N64 game does not have.
@@ -182,5 +191,6 @@ The home screen icon `sce_sys/icon0.png` is made from `assets/icon.png`. The bac
 - Rush 2 Recompiled by bryantmh: no licence published.
 - N64Recomp, N64ModernRuntime, RecompFrontend and RT64: see their repositories.
 - Mesa/RADV PS5 port, PS5_Vulkan and the payload SDK fork by Mihawk-99 (GPL-3.0 for PS5_Vulkan).
+- `ps5/ps5_signal.h`: the client of [ps5-signal](https://github.com/Marice/ps5-signal) (GPL-3.0-or-later).
 - Rush 2: Extreme Racing USA is © Midway. This port is not affiliated with or endorsed by
   Midway, Warner Bros., the Rush 2 Recompiled authors or Sony.
